@@ -1,32 +1,32 @@
 import React from 'react';
 import propTypes from 'prop-types';
-import Skeleton, { SkeletonSize } from '@redhat-cloud-services/frontend-components/Skeleton';
-import { registryDecorator } from '@redhat-cloud-services/frontend-components-utilities/Registry';
-import { InventoryDetail, DetailWrapper } from '@redhat-cloud-services/frontend-components/Inventory';
+import Skeleton, {
+  SkeletonSize,
+} from '@redhat-cloud-services/frontend-components/Skeleton';
+import { init } from 'Store';
 
-@registryDecorator()
-class InventoryDetails extends React.Component {
-    constructor(props) {
-        super(props);
-    }
+import {
+  DetailWrapper,
+  InventoryDetailHead,
+} from '@redhat-cloud-services/frontend-components/Inventory';
 
-    render() {
-        return (
-            <DetailWrapper onLoad={({ mergeWithDetail }) => this.getRegistry().register({
-                ...mergeWithDetail()
-            })}>
-                <InventoryDetail fallback={<Skeleton size={ SkeletonSize.md } />} hideBack />
-            </DetailWrapper>
-        );
-    }
-}
+const InventoryDetails = ({ inventoryId }) => {
+  return (
+    <DetailWrapper
+      onLoad={({ mergeWithDetail }) =>
+        init().register({
+          ...mergeWithDetail(),
+        })
+      }
+      inventoryId={inventoryId}
+    >
+      <InventoryDetailHead fallback={<Skeleton size={SkeletonSize.md} />} />
+    </DetailWrapper>
+  );
+};
 
 InventoryDetails.propTypes = {
-    entity: propTypes.object
+  inventoryId: propTypes.string,
 };
 
-const ConnectedInventoryDetails = (props) => {
-    return <InventoryDetails {...props} />;
-};
-
-export default ConnectedInventoryDetails;
+export default InventoryDetails;

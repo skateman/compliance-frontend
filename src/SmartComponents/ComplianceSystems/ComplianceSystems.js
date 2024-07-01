@@ -1,105 +1,79 @@
 /* eslint-disable react/display-name */
-import React, { useLayoutEffect } from 'react';
-import { useDispatch } from 'react-redux';
-import gql from 'graphql-tag';
-import { useQuery } from '@apollo/react-hooks';
-import PageHeader, { PageHeaderTitle } from '@redhat-cloud-services/frontend-components/PageHeader';
-import Main from '@redhat-cloud-services/frontend-components/Main';
+import React from 'react';
+import { gql, useQuery } from '@apollo/client';
+import { nowrap } from '@patternfly/react-table';
+import PageHeader, {
+  PageHeaderTitle,
+} from '@redhat-cloud-services/frontend-components/PageHeader';
 import { StateViewPart, StateViewWithError } from 'PresentationalComponents';
-import { InventoryTable, SystemsTable } from 'SmartComponents';
-import { GET_SYSTEMS } from '../SystemsTable/constants';
-import { systemName, detailsLink, policiesCell } from 'Store/Reducers/SystemStore';
-import useFeature from 'Utilities/hooks/useFeature';
+import { SystemsTable } from 'SmartComponents';
+import * as Columns from '../SystemsTable/Columns';
 
-const QUERY = gql`
-{
+export const QUERY = gql`
+  {
     profiles(search: "external = false and canonical = false") {
-        edges {
-            node {
-                id
-                name
-                refId
-                majorOsVersion
-            }
+      edges {
+        node {
+          id
+          name
+          osMajorVersion
         }
+      }
     }
-}
+  }
 `;
 
 const DEFAULT_FILTER = 'has_test_results = true or has_policy = true';
 
 export const ComplianceSystems = () => {
-    const newInventory = useFeature('newInventory');
-    const { data, error, loading } = useQuery(QUERY);
-    const dispatch = useDispatch();
-    const columns = [{
-        key: 'facts.compliance.display_name',
-        title: 'Name',
-        props: {
-            width: 40, isStatic: true
-        },
-        ...newInventory && {
-            key: 'display_name',
-            renderFunc: systemName
-        }
-    }, {
-        key: 'facts.compliance.policies',
-        title: 'Policies',
-        props: {
-            width: 40, isStatic: true
-        },
-        ...newInventory && {
-            key: 'policyNames',
-            renderFunc: (policyNames) => {
-                const { title } = policiesCell({ policyNames }) || { title: '' };
-                return title;
-            }
-        }
-    }, {
-        key: 'facts.compliance.details_link',
-        title: '',
-        props: {
-            width: 20, isStatic: true
-        },
-        ...newInventory && {
-            key: 'testResultProfiles',
-            renderFunc: (data, id) => {
-                const { title } = detailsLink({ testResultProfiles: data, id }) || { title: '' };
-                return title;
-            }
-        }
-    }];
-    const policies = data?.profiles?.edges.map(({ node }) => node);
+  const { data, error, loading } = useQuery(QUERY);
+  const policies = data?.profiles?.edges.map(({ node }) => node);
 
-    useLayoutEffect(() => { dispatch({ type: 'SELECT_ENTITIES', payload: { ids: [] } }); }, []);
-
-    const InvComponent = newInventory ? InventoryTable : SystemsTable;
-
-    return (
-        <React.Fragment>
-            <PageHeader className='page-header'>
-                <PageHeaderTitle title="Systems" />
-            </PageHeader>
-            <Main>
-                <StateViewWithError stateValues={ { error, data, loading } }>
-                    <StateViewPart stateKey="data">
-                        { policies && <InvComponent
-                            query={GET_SYSTEMS}
-                            defaultFilter={ DEFAULT_FILTER }
-                            systemProps={{
-                                isFullView: true
-                            }}
-                            showOsFilter
-                            showComplianceSystemsInfo
-                            enableEditPolicy={ false }
-                            remediationsEnabled={ false }
-                            columns={ columns }
-                            policies={ policies } /> }
-                    </StateViewPart>
-                </StateViewWithError>
-            </Main>
-        </React.Fragment>
-    );
+  return (
+    <React.Fragment>
+      <PageHeader className="page-header">
+        <PageHeaderTitle title="Systems" />
+      </PageHeader>
+      <section className="pf-v5-c-page__main-section">
+        <StateViewWithError stateValues={{ error, data, loading }}>
+          <StateViewPart stateKey="data">
+            {policies && (
+              <SystemsTable
+                columns={[
+                  Columns.customName({
+                    showLink: true,
+                  }),
+                  Columns.inventoryColumn('groups', {
+                    requiresDefault: true,
+                    sortBy: ['groups'],
+                  }),
+                  Columns.inventoryColumn('tags'),
+                  Columns.OS,
+                  Columns.Policies,
+                  Columns.inventoryColumn('updated', {
+                    props: { isStatic: true },
+                    transforms: [nowrap],
+                  }),
+                ]}
+                defaultFilter={DEFAULT_FILTER}
+                systemProps={{
+                  isFullView: true,
+                }}
+                showOsMinorVersionFilter={policies.map(
+                  (policy) => policy.osMajorVersion
+                )}
+                showComplianceSystemsInfo
+                enableEditPolicy={false}
+                remediationsEnabled={false}
+                policies={policies}
+                showGroupsFilter
+              />
+            )}
+          </StateViewPart>
+        </StateViewWithError>
+      </section>
+    </React.Fragment>
+  );
 };
 
 export default ComplianceSystems;

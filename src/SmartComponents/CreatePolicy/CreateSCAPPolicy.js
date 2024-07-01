@@ -1,147 +1,127 @@
 import React from 'react';
+import propTypes from 'prop-types';
 import {
-    Button,
-    Form,
-    FormGroup,
-    Text,
-    TextContent,
-    TextVariants,
-    Tooltip,
-    TooltipPosition
+  Form,
+  FormGroup,
+  Text,
+  TextContent,
+  TextVariants,
+  Tile,
 } from '@patternfly/react-core';
-import { OutlinedQuestionCircleIcon } from '@patternfly/react-icons';
-import { ProfileTypeSelect } from 'PresentationalComponents';
-import gql from 'graphql-tag';
-import { useQuery } from '@apollo/react-hooks';
+import { useQuery } from '@apollo/client';
 import Spinner from '@redhat-cloud-services/frontend-components/Spinner';
-import { propTypes as reduxFormPropTypes, formValueSelector, reduxForm } from 'redux-form';
+import {
+  propTypes as reduxFormPropTypes,
+  formValueSelector,
+  reduxForm,
+} from 'redux-form';
 import { connect } from 'react-redux';
 import { compose } from 'redux';
-import propTypes from 'prop-types';
+import { StateViewPart, StateViewWithError } from 'PresentationalComponents';
+import PolicyTypesTable from './Components/PolicyTypeTable';
+import PolicyTypeTooltip from './Components/PolicyTypeTooltip';
+import { SUPPORTED_PROFILES } from './constants';
 
-const BENCHMARKS_AND_PROFILES = gql`
-query benchmarksAndProfiles {
-    latestBenchmarks {
-        id
-        title
-        refId
-        version
-        osMajorVersion
-        profiles {
-            id
-            name
-            refId
-            description
-            complianceThreshold
-        }
-    }
-    profiles(search: "external = false and canonical = false") {
-        edges {
-            node {
-                id
-                refId
-                benchmark {
-                    refId
-                }
-            }
-        }
-    }
-}
-`;
+export const CreateSCAPPolicy = ({
+  change,
+  selectedProfile,
+  selectedOsMajorVersion,
+}) => {
+  const { data, error, loading } = useQuery(SUPPORTED_PROFILES, {
+    fetchPolicy: 'no-cache',
+  });
+  const isInUse = (profileRefId, benchmarkRedId) =>
+    !!data?.profiles?.edges
+      .map(({ node }) => node)
+      .find(
+        (profile) =>
+          profile.refId === profileRefId &&
+          benchmarkRedId === profile.benchmark.refId
+      );
+  const osMajorVersions = data?.osMajorVersions?.edges.map(({ node }) => node);
+  const selectedOsMajorVersionObject = osMajorVersions?.find(
+    ({ osMajorVersion }) => osMajorVersion === selectedOsMajorVersion
+  );
+  const profilesToSelect = selectedOsMajorVersionObject?.profiles.map(
+    (profile) => ({
+      ...profile,
+      disabled: isInUse(profile.refId, profile.benchmark.refId),
+    })
+  );
 
-const CreateSCAPPolicy = ({ change, selectedBenchmarkId }) => {
-    const { data, error, loading } = useQuery(BENCHMARKS_AND_PROFILES, { fetchPolicy: 'no-cache' });
+  return (
+    <StateViewWithError stateValues={{ error, data, loading }}>
+      <StateViewPart stateKey="loading">
+        <Spinner />
+      </StateViewPart>
+      <StateViewPart stateKey="data">
+        <TextContent>
+          <Text component={TextVariants.h1} className="pf-v5-u-mb-md">
+            Create SCAP policy
+          </Text>
+          <Text className="pf-v5-u-mb-md">
+            Select the operating system and policy type for this policy.
+          </Text>
+        </TextContent>
+        <Form>
+          <FormGroup label="Operating system" isRequired fieldId="benchmark">
+            {osMajorVersions &&
+              osMajorVersions.map(({ osMajorVersion }) => (
+                <Tile
+                  key={`rhel${osMajorVersion}-select`}
+                  className="pf-v5-u-mr-md"
+                  title={`RHEL ${osMajorVersion}`}
+                  onClick={() => {
+                    change('osMajorVersion', osMajorVersion);
+                  }}
+                  isSelected={selectedOsMajorVersion === osMajorVersion}
+                  isStacked
+                />
+              ))}
+          </FormGroup>
 
-    const inUseProfileRefIds = (profiles, benchmark) => (
-        profiles.filter(profile => benchmark.refId === profile.node.benchmark.refId).map(profile => profile.node.refId)
-    );
-
-    if (error) { return error; }
-
-    if (loading) { return <Spinner/>; }
-
-    const benchmarks = data.latestBenchmarks;
-    let selectedBenchmark;
-    let validProfiles;
-    if (selectedBenchmarkId) {
-        selectedBenchmark = benchmarks.find(benchmark => benchmark.id === selectedBenchmarkId);
-        const userProfileRefIds = inUseProfileRefIds(data.profiles.edges, selectedBenchmark);
-        validProfiles = selectedBenchmark.profiles.map((profile) => ({
-            ...profile,
-            disabled: userProfileRefIds.includes(profile.refId)
-        }));
-    }
-
-    const setBenchmark = ({ id, osMajorVersion }) => {
-        change('benchmark', id);
-        change('osMajorVersion', osMajorVersion);
-    };
-
-    return (
-        <React.Fragment>
-            <TextContent>
-                <Text component={TextVariants.h1}>
-                    Create SCAP policy
-                </Text>
-                <Text component={TextVariants.h4}>
-                    Select the operating system and policy type
-                </Text>
-            </TextContent>
-            <Form>
-                <FormGroup
-                    label="Operating system"
-                    isRequired
-                    fieldId="benchmark">
-                    <br/>
-                    { benchmarks && benchmarks.sort((a, b) => a.refId.localeCompare(b.refId)).map((benchmark) => {
-                        const { id, osMajorVersion } = benchmark;
-                        return (
-                            <Button key={id} onClick={ () => setBenchmark(benchmark) }
-                                className={`wizard-os-button ${selectedBenchmarkId === id ? 'active-wizard-os-button' : ''}`}
-                                variant="tertiary">
-                                { `RHEL ${osMajorVersion}` }
-                            </Button>
-                        );
-                    })}
-                </FormGroup>
-                { selectedBenchmark &&
-                <Text component={TextVariants.small}>
-                    SCAP Security Guide (SSG): { selectedBenchmark.title } - { selectedBenchmark.version }
-                    <Tooltip position={TooltipPosition.right} content={`Policies configured in the Compliance services use
-                                                                        the latest version of the SSG packaged with RHEL.`}
-                    >
-                        <span>&nbsp;<OutlinedQuestionCircleIcon className='grey-icon'/></span>
-                    </Tooltip>
-                </Text>
-                }
-                <FormGroup label="Policy type" isRequired fieldId="policy-type">
-                    <ProfileTypeSelect
-                        profiles={selectedBenchmark && validProfiles }
-                        onClick={ () => {
-                            change('selectedRuleRefIds', null);
-                        }}/>
-                </FormGroup>
-            </Form>
-        </React.Fragment>
-    );
+          {selectedOsMajorVersion && (
+            <FormGroup
+              isRequired
+              labelIcon={<PolicyTypeTooltip />}
+              label="Policy type"
+              fieldId="policy-type"
+            >
+              <PolicyTypesTable
+                aria-label="PolicyTypeTable"
+                profiles={profilesToSelect}
+                onChange={(policy) => {
+                  change('profile', policy);
+                  change('benchmark', policy.benchmark.id);
+                  change('selectedRuleRefIds', undefined);
+                  change('systems', []);
+                }}
+                selectedProfile={selectedProfile}
+              />
+            </FormGroup>
+          )}
+        </Form>
+      </StateViewPart>
+    </StateViewWithError>
+  );
 };
 
 CreateSCAPPolicy.propTypes = {
-    selectedBenchmarkId: propTypes.string,
-    change: reduxFormPropTypes.change
+  change: reduxFormPropTypes.change,
+  selectedProfile: propTypes.object,
+  selectedOsMajorVersion: propTypes.string,
 };
 
 const selector = formValueSelector('policyForm');
 
 export default compose(
-    connect(
-        state => ({
-            selectedBenchmarkId: selector(state, 'benchmark')
-        })
-    ),
-    reduxForm({
-        form: 'policyForm',
-        destroyOnUnmount: false,
-        forceUnregisterOnUnmount: true
-    })
+  connect((state) => ({
+    selectedProfile: selector(state, 'profile'),
+    selectedOsMajorVersion: selector(state, 'osMajorVersion'),
+  })),
+  reduxForm({
+    form: 'policyForm',
+    destroyOnUnmount: false,
+    forceUnregisterOnUnmount: true,
+  })
 )(CreateSCAPPolicy);
