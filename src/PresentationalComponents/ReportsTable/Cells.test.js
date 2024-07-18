@@ -1,72 +1,102 @@
-import { Name, OperatingSystem, CompliantSystems } from './Cells';
+import { render, screen } from '@testing-library/react';
+import '@testing-library/jest-dom';
+import TestWrapper from '@/Utilities/TestWrapper';
+
+import {
+  Name,
+  OperatingSystem,
+  CompliantSystems,
+  PDFExportDownload,
+} from './Cells';
 
 describe('Name', () => {
-    it('expect to render without error', () => {
-        const wrapper = shallow(
-            <Name { ...{
-                id: 'ID',
-                name: 'NAME',
-                policyType: 'POLICY_TYPE',
-                policy: {
-                    id: 'POLICY_ID',
-                    name: 'POLICY_NAME'
-                }
-            }} />
-        );
+  it('expect to render without error', () => {
+    render(
+      <TestWrapper>
+        <Name
+          {...{
+            id: 'ID',
+            name: 'NAME',
+            policyType: 'POLICY_TYPE',
+            policy: {
+              id: 'POLICY_ID',
+              name: 'POLICY_NAME',
+            },
+          }}
+        />
+      </TestWrapper>
+    );
 
-        expect(toJson(wrapper)).toMatchSnapshot();
-    });
+    expect(screen.getByText('POLICY_NAME')).toBeInTheDocument();
+  });
 });
 
 describe('OperatingSystem', () => {
-    const defaultProps = {
-        majorOsVersion: 7
-    };
+  const defaultProps = {
+    osMajorVersion: '7',
+  };
 
-    it('expect to render without error', () => {
-        const wrapper = shallow(
-            <OperatingSystem { ...defaultProps } />
-        );
+  it('expect to render with SSG version', () => {
+    render(
+      <TestWrapper>
+        <OperatingSystem
+          {...defaultProps}
+          benchmark={{ version: '1.2.3' }}
+          policy={null}
+          unsupportedHostCount={0}
+        />
+      </TestWrapper>
+    );
 
-        expect(toJson(wrapper)).toMatchSnapshot();
-    });
+    expect(screen.getByText('RHEL 7')).toBeInTheDocument();
+    expect(screen.getByText('SSG: 1.2.3')).toBeInTheDocument();
+  });
 
-    it('expect to render with SSG version', () => {
-        const wrapper = shallow(
-            <OperatingSystem { ...defaultProps } ssgVersion='1.2.3' policy={ null } unsupportedHostCount={ 0 } />
-        );
+  it('expect to render with unsupported warning', () => {
+    render(
+      <TestWrapper>
+        <OperatingSystem
+          {...defaultProps}
+          benchmark={{ version: '1.2.3' }}
+          unsupportedHostCount={3}
+          policy={null}
+        />
+      </TestWrapper>
+    );
 
-        expect(toJson(wrapper)).toMatchSnapshot();
-    });
-
-    it('expect to render with unsupported warning', () => {
-        const wrapper = shallow(
-            <OperatingSystem { ...defaultProps } ssgVersion='1.2.3' unsupportedHostCount={ 3 } policy={ null } />
-        );
-
-        expect(toJson(wrapper)).toMatchSnapshot();
-    });
+    expect(
+      screen.getByLabelText('Unsupported SSG Version warning')
+    ).toBeInTheDocument();
+  });
 });
 
 describe('CompliantSystems', () => {
-    const deftaultProps = {
-        testResultHostCount: 10,
-        compliantHostCount: 9
-    };
+  const deftaultProps = {
+    testResultHostCount: 10,
+    compliantHostCount: 9,
+  };
 
-    it('expect to render without error', () => {
-        const wrapper = shallow(
-            <CompliantSystems { ...deftaultProps } />
-        );
+  it('expect to render with unsupported hosts', () => {
+    render(
+      <TestWrapper>
+        <CompliantSystems {...deftaultProps} unsupportedHostCount={42} />
+      </TestWrapper>
+    );
 
-        expect(toJson(wrapper)).toMatchSnapshot();
-    });
+    expect(screen.getByLabelText('Report chart')).toBeInTheDocument();
+  });
+});
 
-    it('expect to render with unsupported hosts', () => {
-        const wrapper = shallow(
-            <CompliantSystems { ...deftaultProps } unsupportedHostCount={ 42 } />
-        );
+describe('PDFExportDownload', () => {
+  it('expect to render without error', () => {
+    render(
+      <TestWrapper>
+        <PDFExportDownload id="ID1" />
+      </TestWrapper>
+    );
 
-        expect(toJson(wrapper)).toMatchSnapshot();
-    });
+    expect(
+      screen.getByLabelText('Reports PDF download link')
+    ).toBeInTheDocument();
+  });
 });

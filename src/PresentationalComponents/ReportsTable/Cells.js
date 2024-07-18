@@ -1,69 +1,101 @@
 import React from 'react';
 import propTypes from 'prop-types';
-import { Label, TextContent, Text, Progress } from '@patternfly/react-core';
-import { Link } from 'react-router-dom';
-import { PolicyPopover, GreySmallText, UnsupportedSSGVersion, OperatingSystemBadge } from 'PresentationalComponents';
+import { TextContent, Text } from '@patternfly/react-core';
+import { DownloadIcon } from '@patternfly/react-icons';
+import {
+  PolicyPopover,
+  GreySmallText,
+  UnsupportedSSGVersion,
+  LinkWithPermission as Link,
+  LinkButton,
+} from 'PresentationalComponents';
+import ReportChart from '../../SmartComponents/ReportDetails/Components/ReportChart';
 
 export const Name = (profile) => (
-    <TextContent>
-        <Link to={'/reports/' + profile.id} style={ { marginRight: '.5rem' }}>
-            { profile.policy ? profile.policy.name : profile.name }
-        </Link>
-        { profile.policy
-            ? <React.Fragment>
-                <PolicyPopover { ...{ profile, position: 'right' } } />
-                <GreySmallText>{ profile.policyType }</GreySmallText>
-            </React.Fragment>
-
-            : <Label color="red">External</Label>
-        }
-    </TextContent>
+  <TextContent>
+    <Link to={`/reports/${profile.id}`} style={{ marginRight: '.5rem' }}>
+      {profile.policy?.name}
+    </Link>
+    <React.Fragment>
+      <PolicyPopover {...{ profile, position: 'right' }} />
+      <GreySmallText>{profile.policyType}</GreySmallText>
+    </React.Fragment>
+  </TextContent>
 );
 
 Name.propTypes = {
-    profile: propTypes.object
+  profile: propTypes.object,
 };
 
-export const OperatingSystem = ({ majorOsVersion, ssgVersion, unsupportedHostCount, policy }) => {
-    const supported = unsupportedHostCount === 0;
-    ssgVersion = 'SSG: ' + ssgVersion;
+export const OperatingSystem = ({
+  osMajorVersion,
+  unsupportedHostCount,
+  benchmark,
+  policy,
+}) => {
+  const { version: ssgVersion } = benchmark || {};
+  const supported = unsupportedHostCount === 0;
+  const ssgVersionLabel = 'SSG: ' + ssgVersion;
 
-    return <React.Fragment>
-        <OperatingSystemBadge { ...{ majorOsVersion } } />
-        { policy === null && ssgVersion && <Text>
-            <GreySmallText>
-                { supported ? ssgVersion : <UnsupportedSSGVersion>{ ssgVersion }</UnsupportedSSGVersion> }
-            </GreySmallText>
-        </Text> }
-    </React.Fragment>;
+  return (
+    <React.Fragment>
+      RHEL {osMajorVersion}
+      {policy === null && ssgVersion && (
+        <Text>
+          <GreySmallText>
+            {supported ? (
+              ssgVersionLabel
+            ) : (
+              <UnsupportedSSGVersion>{ssgVersionLabel}</UnsupportedSSGVersion>
+            )}
+          </GreySmallText>
+        </Text>
+      )}
+    </React.Fragment>
+  );
 };
 
 OperatingSystem.propTypes = {
-    majorOsVersion: propTypes.number,
-    ssgVersion: propTypes.string,
-    unsupportedHostCount: propTypes.number,
-    policy: propTypes.object
+  osMajorVersion: propTypes.string,
+  benchmark: propTypes.object,
+  unsupportedHostCount: propTypes.number,
+  policy: propTypes.object,
 };
 
-export const CompliantSystems = ({ testResultHostCount = 0, compliantHostCount = 0, unsupportedHostCount = 0 }) => {
-    const tooltipText = 'Insights cannot provide a compliance score for systems running an unsupported ' +
-        'version of the SSG at the time this report was created, as the SSG version was not supported by RHEL.';
-    return <React.Fragment>
-        <Progress
-            measureLocation={ 'outside' }
-            value={ testResultHostCount ? (100 / testResultHostCount) * compliantHostCount : 0 } />
-        <GreySmallText>
-            { `${ compliantHostCount } of ${ testResultHostCount } systems ` }
-
-            { unsupportedHostCount > 0 && <UnsupportedSSGVersion { ...{ tooltipText } } style={ { marginLeft: '.5em' } }>
-                <strong className='ins-c-warning-text'>{ unsupportedHostCount } unsupported</strong>
-            </UnsupportedSSGVersion> }
-        </GreySmallText>
-    </React.Fragment>;
+export const CompliantSystems = (profile) => {
+  return (
+    <React.Fragment>
+      <ReportChart
+        profile={profile}
+        hasLegend={false}
+        chartClass="report-table-chart-container"
+      />
+    </React.Fragment>
+  );
 };
 
 CompliantSystems.propTypes = {
-    testResultHostCount: propTypes.number,
-    compliantHostCount: propTypes.number,
-    unsupportedHostCount: propTypes.number
+  testResultHostCount: propTypes.number,
+  compliantHostCount: propTypes.number,
+  unsupportedHostCount: propTypes.number,
+  totalHostCount: propTypes.number,
+};
+
+export const PDFExportDownload = ({ id }) => (
+  <Link
+    aria-label="Reports PDF download link"
+    to={`/reports/${id}/pdf`}
+    Component={LinkButton}
+    componentProps={{
+      className: 'pf-v5-u-mr-md',
+      variant: 'plain',
+      ouiaId: 'ReportsDownloadReportPDFLink',
+    }}
+  >
+    <DownloadIcon />
+  </Link>
+);
+
+PDFExportDownload.propTypes = {
+  id: propTypes.string,
 };

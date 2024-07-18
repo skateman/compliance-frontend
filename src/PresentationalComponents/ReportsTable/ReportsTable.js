@@ -1,77 +1,58 @@
 import React from 'react';
 import propTypes from 'prop-types';
-import { Table, TableBody, TableHeader, sortable, fitContent } from '@patternfly/react-table';
-import PrimaryToolbar from '@redhat-cloud-services/frontend-components/PrimaryToolbar';
-import { emptyRows } from 'PresentationalComponents';
-import useFilterConfig from 'Utilities/hooks/useFilterConfig';
-import useTableSort from 'Utilities/hooks/useTableSort';
-import { Name, OperatingSystem, CompliantSystems } from './Cells';
+import { COMPLIANCE_TABLE_DEFAULTS } from '@/constants';
+import { emptyRows } from '../../Utilities/hooks/useTableTools/Components/NoResultsTable';
+import { TableToolsTable } from 'Utilities/hooks/useTableTools';
 import { uniq } from 'Utilities/helpers';
+import columns, { exportableColumns, PDFExportDownload } from './Columns';
 import {
-    policyNameFilter, policyTypeFilter, operatingSystemFilter, policyComplianceFilter
+  policyNameFilter,
+  policyTypeFilter,
+  operatingSystemFilter,
+  policyComplianceFilter,
 } from './Filters';
+import '../../App.scss';
 
 const ReportsTable = ({ profiles }) => {
-    const columns = [
-        {
-            title: 'Policy',
-            transforms: [sortable],
-            sortByProperty: 'name',
-            props: {
-                width: 55
-            }
-        },
-        {
-            title: 'Operating system',
-            transforms: [sortable, fitContent],
-            sortByProperty: 'majorOsVersion',
-            props: {
-                width: 20
-            }
-        },
-        {
-            title: 'Systems meeting compliance',
-            transforms: [sortable, fitContent],
-            sortByFunction: ({ testResultHostCount, compliantHostCount }) => (
-                (100 / testResultHostCount) * compliantHostCount
-            ),
-            props: {
-                width: 25
-            }
-        }
-    ];
-    const policyTypes = uniq(profiles.map(({ policyType }) => (policyType)).filter((i) => (!!i)));
-    const operatingSystems = uniq(profiles.map(({ majorOsVersion }) => (majorOsVersion)).filter((i) => (!!i)));
-    const { conditionalFilter, filtered: filteredProfiles } = useFilterConfig([
-        ...policyNameFilter,
-        ...policyTypes.length > 0 && policyTypeFilter(policyTypes) || [],
-        ...operatingSystems.length > 0 && operatingSystemFilter(operatingSystems) || [],
-        ...policyComplianceFilter
-    ], profiles);
-    const { tableSort, sorted: sortedProfiles } = useTableSort(filteredProfiles, columns);
-    const rows = sortedProfiles.length > 0 ? sortedProfiles.map((profile) => ({
-        cells: [
-            { title: <Name { ...profile } /> },
-            { title: <OperatingSystem { ...profile } /> },
-            { title: <CompliantSystems { ...profile } /> }
-        ]
-    })) : emptyRows;
+  const policyTypes = uniq(
+    profiles.map(({ policyType }) => policyType).filter((i) => !!i)
+  );
+  const operatingSystems = uniq(
+    profiles.map(({ osMajorVersion }) => osMajorVersion).filter((i) => !!i)
+  );
 
-    return <React.Fragment>
-        <PrimaryToolbar { ...conditionalFilter } />
-        <Table
-            aria-label='Reports'
-            cells={ columns }
-            rows={ rows }
-            { ...tableSort }>
-            <TableHeader />
-            <TableBody />
-        </Table>
-    </React.Fragment>;
+  return (
+    <TableToolsTable
+      aria-label="Reports"
+      ouiaId="ReportsTable"
+      columns={[...columns, PDFExportDownload]}
+      items={profiles}
+      isStickyHeader
+      filters={{
+        filterConfig: [
+          ...policyNameFilter,
+          ...((policyTypes.length > 0 && policyTypeFilter(policyTypes)) || []),
+          ...((operatingSystems.length > 0 &&
+            operatingSystemFilter(operatingSystems)) ||
+            []),
+          ...policyComplianceFilter,
+        ],
+      }}
+      options={{
+        ...COMPLIANCE_TABLE_DEFAULTS,
+        exportable: {
+          ...COMPLIANCE_TABLE_DEFAULTS.exportable,
+          columns: exportableColumns,
+        },
+        emptyRows: emptyRows('reports', columns.length),
+      }}
+      className={'reports-table'}
+    />
+  );
 };
 
 ReportsTable.propTypes = {
-    profiles: propTypes.array
+  profiles: propTypes.array,
 };
 
 export default ReportsTable;

@@ -1,71 +1,114 @@
-import {
-    Button,
-    Modal,
-    ModalVariant,
-    TextContent
-} from '@patternfly/react-core';
+import React, { useState } from 'react';
 import propTypes from 'prop-types';
-import React from 'react';
-import { useHistory, useLocation } from 'react-router-dom';
-import { useMutation } from '@apollo/react-hooks';
-import { DELETE_PROFILE } from 'Utilities/graphql/mutations';
+import { useParams } from 'react-router-dom';
+import { useMutation } from '@apollo/client';
+import {
+  Button,
+  Checkbox,
+  ModalVariant,
+  Text,
+  Spinner,
+} from '@patternfly/react-core';
+import useNavigate from '@redhat-cloud-services/frontend-components-utilities/useInsightsNavigate';
+import { DELETE_PROFILE } from 'Mutations';
 import { addNotification } from '@redhat-cloud-services/frontend-components-notifications/redux';
+import {
+  ComplianceModal,
+  StateViewWithError,
+  StateViewPart,
+} from 'PresentationalComponents';
 import { dispatchAction } from 'Utilities/Dispatcher';
+import usePolicyQuery from 'Utilities/hooks/usePolicyQuery';
 
 const DeletePolicy = () => {
-    const location = useLocation();
-    const history = useHistory();
-    const { name, id } = location.state.policy;
-    const onClose = () => {
-        history.push('/scappolicies');
-    };
+  const [deleteEnabled, setDeleteEnabled] = useState(false);
+  const navigate = useNavigate();
+  const { policy_id: policyId } = useParams();
+  const { data, error, loading } = usePolicyQuery({
+    policyId,
+    minimal: true,
+  });
+  const {
+    profile: { name, id },
+  } = data || { profile: {} };
+  const onClose = () => {
+    navigate('/scappolicies');
+  };
 
-    const [deletePolicy] = useMutation(DELETE_PROFILE, {
-        onCompleted: () => {
-            dispatchAction(addNotification({
-                variant: 'success',
-                title: `Removed policy ${ name }`
-            }));
-            onClose();
-        },
-        onError: (error) => {
-            dispatchAction(addNotification({
-                variant: 'danger',
-                title: 'Error removing policy',
-                description: error.message
-            }));
-            onClose();
-        }
-    });
+  const [deletePolicy] = useMutation(DELETE_PROFILE, {
+    onCompleted: () => {
+      dispatchAction(
+        addNotification({
+          variant: 'success',
+          title: `Deleted "${name}" and its associated reports`,
+        })
+      );
+      onClose();
+    },
+    onError: (error) => {
+      dispatchAction(
+        addNotification({
+          variant: 'danger',
+          title: 'Error removing policy',
+          description: error.message,
+        })
+      );
+      onClose();
+    },
+  });
 
-    return (
-        <Modal
-            variant={ ModalVariant.small }
-            title='Delete policy'
-            isOpen
-            onClose={ onClose }
-            actions={[
-                <Button key='destroy'
-                    aria-label="delete"
-                    variant='danger'
-                    onClick={() => deletePolicy({ variables: { input: { id } } })}>
-                    Delete policy
-                </Button>,
-                <Button key='cancel' variant='secondary' onClick={ onClose }>
-                    Cancel
-                </Button>
-            ]}
+  return (
+    <ComplianceModal
+      variant={ModalVariant.small}
+      title="Delete policy?"
+      titleIconVariant="warning"
+      ouiaId="DeletePolicyModal"
+      isOpen
+      onClose={onClose}
+      actions={[
+        <Button
+          key="destroy"
+          ouiaId="DeletePolicyButton"
+          aria-label="delete"
+          isDisabled={!deleteEnabled}
+          variant="danger"
+          onClick={() => deletePolicy({ variables: { input: { id } } })}
         >
-            <TextContent>
-                Are you sure you want to delete <b>{ name }</b>?
-                This cannot be undone.
-            </TextContent>
-        </Modal>
-    );
+          Delete policy and associated reports
+        </Button>,
+        <Button
+          key="cancel"
+          ouiaId="DeletePolicyCancelButton"
+          variant="secondary"
+          onClick={onClose}
+        >
+          Cancel
+        </Button>,
+      ]}
+    >
+      <StateViewWithError stateValues={{ error, data, loading }}>
+        <StateViewPart stateKey="loading">
+          <Spinner />
+        </StateViewPart>
+        <StateViewPart stateKey="data">
+          <Text className="policy-delete-body-text">
+            Deleting the policy <b>{name}</b> will also delete its associated
+            reports.
+          </Text>
+          <Checkbox
+            label="I understand this will delete the policy and all associated reports"
+            id={`deleting-policy-check-${id}`}
+            isChecked={deleteEnabled}
+            onChange={(_, v) => setDeleteEnabled(v)}
+          />
+        </StateViewPart>
+      </StateViewWithError>
+    </ComplianceModal>
+  );
 };
 
 DeletePolicy.propTypes = {
-    policy: propTypes.object
+  policy: propTypes.object,
 };
 
 export default DeletePolicy;
