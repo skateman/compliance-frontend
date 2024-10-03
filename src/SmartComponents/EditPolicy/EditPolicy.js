@@ -1,128 +1,128 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import propTypes from 'prop-types';
-import { useLocation } from 'react-router-dom';
-import { useSelector, useDispatch } from 'react-redux';
-import { Button, Form, Modal, Tab, TabTitleText } from '@patternfly/react-core';
-import { RoutedTabs } from 'PresentationalComponents';
-import { InventoryTable, SystemsTable } from 'SmartComponents';
-import { useLinkToBackground, useAnchor } from 'Utilities/Router';
+import { Button, Spinner } from '@patternfly/react-core';
+import { useLocation, useParams } from 'react-router-dom';
+import useNavigate from '@redhat-cloud-services/frontend-components-utilities/useInsightsNavigate';
 import { useTitleEntity } from 'Utilities/hooks/useDocumentTitle';
-import EditPolicyDetailsTab from './EditPolicyDetailsTab';
-import usePolicyUpdate from './usePolicyUpdate';
-import useFeature from 'Utilities/hooks/useFeature';
-import { systemName } from 'Store/Reducers/SystemStore';
-import { GET_SYSTEMS_WITHOUT_FAILED_RULES } from '../SystemsTable/constants';
+import {
+  ComplianceModal,
+  StateViewWithError,
+  StateViewPart,
+} from 'PresentationalComponents';
+import EditPolicyForm from './EditPolicyForm';
+import { useOnSave } from './hooks';
+import usePolicyQuery from 'Utilities/hooks/usePolicyQuery';
 
 export const EditPolicy = ({ route }) => {
-    const newInventory = useFeature('newInventory');
-    const location = useLocation();
-    const dispatch = useDispatch();
-    const policy = location?.state?.policy;
-    const anchor = useAnchor();
-    const [updatedPolicy, setUpdatedPolicy] = useState(null);
-    const updatePolicy = usePolicyUpdate();
-    const linkToBackground = useLinkToBackground('/scappolicies');
-    const selectedEntities = useSelector((state) => (state?.entities?.selectedEntities));
-    const saveEnabled = updatedPolicy && !updatedPolicy.complianceThresholdValid;
+  const navigate = useNavigate();
+  const { policy_id: policyId } = useParams();
+  const location = useLocation();
+  const { data, error, loading } = usePolicyQuery({ policyId });
+  const policy = data?.profile;
+  const [updatedPolicy, setUpdatedPolicy] = useState(null);
+  const [selectedRuleRefIds, setSelectedRuleRefIds] = useState([]);
+  const [selectedSystems, setSelectedSystems] = useState([]);
+  const [ruleValues, setRuleValuesState] = useState({});
 
-    const linkToBackgroundWithHash = () => {
-        newInventory && dispatch({
-            type: 'SELECT_ENTITIES',
-            payload: { ids: [] }
-        });
-        linkToBackground({ hash: anchor });
-    };
+  const saveEnabled = updatedPolicy && !updatedPolicy.complianceThresholdValid;
+  const updatedPolicyHostsAndRules = {
+    ...updatedPolicy,
+    selectedRuleRefIds,
+    hosts: selectedSystems,
+    values: ruleValues,
+  };
+  const onSaveCallback = (isClose) =>
+    navigate(
+      isClose ? `/scappolicies/${policyId}` : location.state?.returnTo || -1
+    );
 
-    const actions = [
-        <Button
-            isDisabled={ saveEnabled }
-            key='save'
-            variant='primary'
-            onClick={ () => (
-                updatePolicy(policy, updatedPolicy).then(() => linkToBackgroundWithHash())
-            ) }>
-            Save
-        </Button>,
-        <Button
-            key='cancel'
-            variant='secondary'
-            onClick={ () => linkToBackgroundWithHash() }>
-            Cancel
-        </Button>
-    ];
+  const [isSaving, onSave] = useOnSave(policy, updatedPolicyHostsAndRules, {
+    onSave: onSaveCallback,
+    onError: onSaveCallback,
+  });
 
-    useEffect(() => {
-        setUpdatedPolicy({
-            ...updatedPolicy,
-            hosts: selectedEntities ? selectedEntities : []
-        });
-    }, [selectedEntities]);
+  const setRuleValues = (policyId, valueDefinition, valueValue) => {
+    const existingValues = Object.fromEntries(
+      policy?.policy.profiles.map((profile) => {
+        return [profile.id, profile.values];
+      }) || []
+    );
 
-    useEffect(() => {
-        const complianceThresholdValid =
-            (policy.complianceThreshold < 101 && policy.complianceThreshold > 0);
-        setUpdatedPolicy({
-            ...policy,
-            complianceThresholdValid
-        });
-        dispatch({
-            type: 'SELECT_ENTITIES',
-            payload: { ids: policy?.hosts?.map(({ id }) => ({ id })) || [] }
-        });
-    }, [policy]);
+    setRuleValuesState((currentValues) => ({
+      ...existingValues,
+      ...currentValues,
+      [policyId]: {
+        ...existingValues[policyId],
+        ...currentValues[policyId],
+        [valueDefinition.id]: valueValue,
+      },
+    }));
+  };
 
-    const InvCmp = newInventory ? InventoryTable : SystemsTable;
-    useTitleEntity(route, policy?.name);
+  const actions = [
+    <Button
+      isDisabled={saveEnabled}
+      key="save"
+      ouiaId="EditPolicySaveButton"
+      variant="primary"
+      spinnerAriaValueText="Saving"
+      isLoading={isSaving}
+      onClick={onSave}
+    >
+      Save
+    </Button>,
+    <Button
+      key="cancel"
+      ouiaId="EditPolicyCancelButton"
+      variant="link"
+      onClick={() => onSaveCallback(true)}
+    >
+      Cancel
+    </Button>,
+  ];
 
-    return policy && <Modal
-        isOpen
-        style={ { height: '400px' } }
-        width={ 1000 }
-        title={ `Edit ${policy.name }` }
-        onClose={ () => linkToBackgroundWithHash() }
-        actions={ actions }>
-        <Form>
-            <RoutedTabs defaultTab='details'>
-                <Tab eventKey='details' title={<TabTitleText>Details</TabTitleText>}>
-                    <EditPolicyDetailsTab
-                        policy={ policy }
-                        setUpdatedPolicy={ setUpdatedPolicy } />
-                </Tab>
+  useTitleEntity(route, policy?.name);
 
-                <Tab eventKey='rules' title={ <TabTitleText>Rules</TabTitleText> }>
-                    Rule editing coming soon
-                </Tab>
-
-                <Tab eventKey='systems' title={ <TabTitleText>Systems</TabTitleText> }>
-                    <InvCmp
-                        compact
-                        showActions={ false }
-                        enableExport={ false }
-                        remediationsEnabled={ false }
-                        policyId={ policy.id }
-                        query={GET_SYSTEMS_WITHOUT_FAILED_RULES}
-                        columns={[{
-                            key: 'facts.compliance.display_name',
-                            title: 'Name',
-                            props: {
-                                width: 40, isStatic: true
-                            },
-                            ...newInventory && {
-                                key: 'display_name',
-                                renderFunc: (displayName, id, extra) => {
-                                    return extra?.lastScanned ? systemName(displayName, id, extra) : displayName;
-                                }
-                            }
-                        }]}
-                        preselectedSystems={ policy?.hosts.map((h) => ({ id: h.id })) || [] } />
-                </Tab>
-            </RoutedTabs>
-        </Form>
-    </Modal>;
+  return (
+    <ComplianceModal
+      isOpen
+      position={'top'}
+      style={{ minHeight: '350px' }}
+      width={1220}
+      variant={'large'}
+      ouiaId="EditPolicyModal"
+      title={`Edit ${policy ? policy.name : ''}`}
+      onClose={() => onSaveCallback(true)}
+      actions={actions}
+    >
+      <StateViewWithError
+        stateValues={{ data: policy && !loading, loading, error }}
+      >
+        <StateViewPart stateKey="loading">
+          <Spinner />
+        </StateViewPart>
+        <StateViewPart stateKey="data">
+          <EditPolicyForm
+            {...{
+              policy,
+              updatedPolicy,
+              setUpdatedPolicy,
+              selectedRuleRefIds,
+              setSelectedRuleRefIds,
+              selectedSystems,
+              setSelectedSystems,
+              setRuleValues,
+              ruleValues,
+            }}
+          />
+        </StateViewPart>
+      </StateViewWithError>
+    </ComplianceModal>
+  );
 };
 
 EditPolicy.propTypes = {
-    route: propTypes.object
+  route: propTypes.object,
 };
 
 export default EditPolicy;

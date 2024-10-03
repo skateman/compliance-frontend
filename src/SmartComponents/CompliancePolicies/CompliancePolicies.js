@@ -1,94 +1,119 @@
 import React, { useEffect } from 'react';
-import gql from 'graphql-tag';
 import { useLocation } from 'react-router-dom';
-import { useQuery } from '@apollo/react-hooks';
+import { useQuery } from '@apollo/client';
+import { Grid } from '@patternfly/react-core';
+import PageHeader, {
+  PageHeaderTitle,
+} from '@redhat-cloud-services/frontend-components/PageHeader';
+import ComplianceEmptyState from 'PresentationalComponents/ComplianceEmptyState';
 import {
-    Button,
-    Grid
-} from '@patternfly/react-core';
-import PageHeader, { PageHeaderTitle } from '@redhat-cloud-services/frontend-components/PageHeader';
-import Main from '@redhat-cloud-services/frontend-components/Main';
-import ComplianceEmptyState from '@redhat-cloud-services/frontend-components-inventory-compliance/ComplianceEmptyState';
-import {
-    BackgroundLink,
-    ErrorPage,
-    LoadingPoliciesTable,
-    PoliciesTable,
-    StateView,
-    StateViewPart
+  LinkWithPermission as Link,
+  ErrorPage,
+  LoadingPoliciesTable,
+  PoliciesTable,
+  StateView,
+  StateViewPart,
+  LinkButton,
 } from 'PresentationalComponents';
+import { usePoliciesQuery } from '../../Utilities/hooks/usePoliciesQuery/usePoliciesQuery';
+import PropTypes from 'prop-types';
+import dataSerialiser from '../../Utilities/dataSerialiser';
+import { QUERY, dataMap } from './constants';
+import GatedComponents from '@/PresentationalComponents/GatedComponents';
 
-const QUERY = gql`
-{
-    profiles(search: "external = false and canonical = false") {
-        edges {
-            node {
-                id
-                name
-                description
-                refId
-                complianceThreshold
-                totalHostCount
-                majorOsVersion
-                policyType
-                policy {
-                    id
-                    name
-                }
-                benchmark {
-                    id
-                    title
-                    version
-                }
-                hosts {
-                    id
-                }
-                businessObjective {
-                    id
-                    title
-                }
-            }
-        }
-    }
-}
-`;
+export const CompliancePoliciesBase = ({ query }) => {
+  const location = useLocation();
+  const CreateLink = () => (
+    <Link
+      to="/scappolicies/new"
+      Component={LinkButton}
+      componentProps={{
+        variant: 'primary',
+        ouiaId: 'CreateNewPolicyButton',
+      }}
+    >
+      Create new policy
+    </Link>
+  );
 
-export const CompliancePolicies = () => {
-    const location = useLocation();
-    const createLink = <BackgroundLink to='/scappolicies/new'>
-        <Button variant='primary'>Create new policy</Button>
-    </BackgroundLink>;
-    let { data, error, loading, refetch } = useQuery(QUERY);
-    useEffect(() => { refetch(); }, [location, refetch]);
-    let policies;
+  let { data, error, loading, refetch } = query;
+  useEffect(() => {
+    refetch();
+  }, [location, refetch]);
+  let policies;
 
-    if (data) {
-        error = undefined; loading = undefined;
-        policies = data.profiles.edges.map(profile => profile.node);
-    }
+  if (data) {
+    error = undefined;
+    loading = undefined;
+    policies = data.profiles.edges.map((profile) => profile.node);
+  }
 
-    return <React.Fragment>
-        <PageHeader className='page-header'>
-            <PageHeaderTitle title="SCAP policies" />
-        </PageHeader>
-        <Main>
-            <StateView stateValues={ { error, data, loading } }>
-                <StateViewPart stateKey='error'>
-                    <ErrorPage error={error}/>
-                </StateViewPart>
-                <StateViewPart stateKey='loading'>
-                    <LoadingPoliciesTable />
-                </StateViewPart>
-                <StateViewPart stateKey='data'>
-                    { policies && policies.length === 0 ?
-                        <Grid hasGutter><ComplianceEmptyState title='No policies'
-                            mainButton={ createLink } /></Grid> :
-                        <PoliciesTable policies={ policies } />
-                    }
-                </StateViewPart>
-            </StateView>
-        </Main>
-    </React.Fragment>;
+  return (
+    <React.Fragment>
+      <PageHeader className="page-header">
+        <PageHeaderTitle title="SCAP policies" />
+      </PageHeader>
+      <section className="pf-v5-c-page__main-section">
+        <StateView stateValues={{ error, data, loading }}>
+          <StateViewPart stateKey="error">
+            <ErrorPage error={error} />
+          </StateViewPart>
+          <StateViewPart stateKey="loading">
+            <LoadingPoliciesTable />
+          </StateViewPart>
+          <StateViewPart stateKey="data">
+            {policies && policies.length === 0 ? (
+              <Grid hasGutter>
+                <ComplianceEmptyState
+                  title="No policies"
+                  mainButton={<CreateLink />}
+                />
+              </Grid>
+            ) : (
+              <PoliciesTable policies={policies} DedicatedAction={CreateLink} />
+            )}
+          </StateViewPart>
+        </StateView>
+      </section>
+    </React.Fragment>
+  );
 };
 
-export default CompliancePolicies;
+CompliancePoliciesBase.propTypes = {
+  query: PropTypes.shape({
+    data: PropTypes.object,
+    error: PropTypes.string,
+    loading: PropTypes.bool,
+    refetch: PropTypes.func,
+  }),
+};
+
+const CompliancePoliciesV2 = () => {
+  const query = usePoliciesQuery();
+
+  const data = query.data?.data
+    ? {
+        profiles: {
+          edges: query.data.data.map((policy) => ({
+            node: dataSerialiser(policy, dataMap),
+          })),
+        },
+      }
+    : null;
+
+  return <CompliancePoliciesBase query={{ ...query, data }} />;
+};
+
+const CompliancePoliciesGraphQL = () => {
+  const query = useQuery(QUERY);
+  return <CompliancePoliciesBase query={query} />;
+};
+
+const CompliancePoliciesWrapper = () => (
+  <GatedComponents
+    RestComponent={CompliancePoliciesV2}
+    GraphQLComponent={CompliancePoliciesGraphQL}
+  />
+);
+
+export default CompliancePoliciesWrapper;

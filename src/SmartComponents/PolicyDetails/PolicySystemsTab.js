@@ -1,60 +1,46 @@
 /* eslint-disable react/display-name */
 import React from 'react';
 import propTypes from 'prop-types';
-import { InventoryTable, SystemsTable } from 'SmartComponents';
-import { GET_SYSTEMS } from '../SystemsTable/constants';
-import { Link } from 'react-router-dom';
-import { Cells } from '@/SmartComponents/SystemsTable/SystemsTable';
-import useFeature from 'Utilities/hooks/useFeature';
+import { NoSystemsTableWithWarning } from 'PresentationalComponents';
+import { SystemsTable } from 'SmartComponents';
+import * as Columns from '../SystemsTable/Columns';
+import EditSystemsButtonToolbarItem from './EditSystemsButtonToolbarItem';
 
-const PolicySystemsTab = ({ policy, systemTableProps }) => {
-    const newInventory = useFeature('newInventory');
-    let showSsgVersions = useFeature('showSsgVersions');
-    const InvCmp = newInventory ? InventoryTable : SystemsTable;
-
-    return (
-        <InvCmp
-            query={GET_SYSTEMS}
-            policyId={ policy.id }
-            defaultFilter={`policy_id = ${policy.id}`}
-            showActions={ false }
-            remediationsEnabled={ false }
-            columns={[{
-                key: 'facts.compliance.display_name',
-                title: 'Name',
-                props: {
-                    width: 40, isStatic: true
-                },
-                ...newInventory && {
-                    key: 'display_name',
-                    renderFunc: (name, id) => <Link to={{ pathname: `/systems/${id}` }}> {name} </Link>
-                }
-            }, ...showSsgVersions ? [{
-                key: 'facts.compliance',
-                title: 'SSG version',
-                renderFunc: (profile, ...rest) => {
-                    let realProfile = profile;
-                    if (typeof profile === 'string') {
-                        realProfile = rest[1];
-                    }
-
-                    return realProfile && <Cells.SSGVersion
-                        supported={ realProfile.supported }
-                        ssgVersion={ realProfile?.ssg_version || realProfile?.ssgVersion } />;
-                }
-            }] : []]}
-            complianceThreshold={ policy.complianceThreshold }
-            { ...systemTableProps }
-        />
-    );
+const PolicySystemsTab = ({ policy }) => {
+  return (
+    <SystemsTable
+      columns={[
+        Columns.customName({
+          showLink: true,
+        }),
+        Columns.inventoryColumn('tags'),
+        Columns.OS,
+        Columns.SsgVersion,
+      ]}
+      showOsMinorVersionFilter={[policy.osMajorVersion]}
+      policyId={policy.id}
+      defaultFilter={`policy_id = ${policy.id}`}
+      showActions={false}
+      remediationsEnabled={false}
+      noSystemsTable={
+        policy?.hosts?.length === 0 && <NoSystemsTableWithWarning />
+      }
+      complianceThreshold={policy.complianceThreshold}
+      dedicatedAction={<EditSystemsButtonToolbarItem policy={policy} />}
+      apiV2Enabled={false} //TODO: change to useAPIV2FeatureFlag when migrating to REST
+    />
+  );
 };
 
 PolicySystemsTab.propTypes = {
-    policy: propTypes.shape({
-        id: propTypes.string.isRequired,
-        complianceThreshold: propTypes.number.isRequired
-    }),
-    systemTableProps: propTypes.object
+  policy: propTypes.shape({
+    id: propTypes.string.isRequired,
+    complianceThreshold: propTypes.string.isRequired,
+    osMajorVersion: propTypes.string.isRequired,
+    hosts: propTypes.array.isRequired,
+  }),
+  dedicatedAction: propTypes.object,
+  systemTableProps: propTypes.object,
 };
 
 export default PolicySystemsTab;
