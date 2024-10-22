@@ -6,4 +6,12 @@ if [[ ! -d "/compliance/node_modules/@redhat-cloud-services" ]]; then
     cd /compliance; /usr/bin/npm install;
 fi
 
+export IN_DOCKER='true';
+
+source $NVM_DIR/nvm.sh
+
+nvm use "v$NODE_VERSION"
+node --version
+npm --version
+
 exec "$@"

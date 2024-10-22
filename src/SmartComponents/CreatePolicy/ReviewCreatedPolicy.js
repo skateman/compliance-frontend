@@ -1,110 +1,103 @@
 import React from 'react';
 import {
-    Text,
-    TextVariants,
-    TextContent,
-    TextList,
-    TextListVariants,
-    TextListItem,
-    TextListItemVariants
+  Label,
+  Text,
+  TextVariants,
+  TextContent,
+  TextList,
+  TextListVariants,
+  TextListItem,
+  TextListItemVariants,
 } from '@patternfly/react-core';
 import { formValueSelector } from 'redux-form';
 import { connect } from 'react-redux';
-import gql from 'graphql-tag';
 import propTypes from 'prop-types';
-import Spinner from '@redhat-cloud-services/frontend-components/Spinner';
-import { useQuery } from '@apollo/react-hooks';
-import {
-    SystemsCountWarning
-} from 'PresentationalComponents';
-
-const REVIEW = gql`
-query review($benchmarkId: String!) {
-    benchmark(id: $benchmarkId) {
-        id
-        title
-        refId
-        osMajorVersion
-        version
-    }
-}
-`;
 
 const ReviewCreatedPolicy = ({
-    benchmarkId, name, refId, businessObjective, systemsCount, rulesCount, complianceThreshold, parentProfileName
-}) => {
-    const { data, error, loading } = useQuery(REVIEW, { variables: { benchmarkId } });
-
-    if (error) { return error; }
-
-    if (loading) { return <Spinner/>; }
-
-    const benchmark = data.benchmark;
-
-    return (
-        <TextContent>
-            <Text component={TextVariants.h1}>
-                Review
-            </Text>
-            <Text component={TextVariants.h4}>
-                Review your policy before finishing.
-            </Text>
-            <TextList component={TextListVariants.dl}>
-                <TextListItem component={TextListItemVariants.dt}>Operating system</TextListItem>
-                <TextListItem component={TextListItemVariants.dd}>
-                    { `RHEL ${benchmark.osMajorVersion}` }
-                </TextListItem>
-                <TextListItem component={TextListItemVariants.dt}>Security guide</TextListItem>
-                <TextListItem component={TextListItemVariants.dd}>
-                    {` ${benchmark.title} - ${benchmark.version}`}
-                </TextListItem>
-                <TextListItem component={TextListItemVariants.dt}>Policy type</TextListItem>
-                <TextListItem component={TextListItemVariants.dd}>{ parentProfileName }</TextListItem>
-                <TextListItem component={TextListItemVariants.dt}>Policy name</TextListItem>
-                <TextListItem component={TextListItemVariants.dd}>{ name }</TextListItem>
-                <TextListItem component={TextListItemVariants.dt}>Reference ID</TextListItem>
-                <TextListItem component={TextListItemVariants.dd}>{ refId }</TextListItem>
-                <TextListItem component={TextListItemVariants.dt}>Compliance threshold</TextListItem>
-                <TextListItem component={TextListItemVariants.dd}>{ complianceThreshold }%</TextListItem>
-                { businessObjective &&
-                    <React.Fragment>
-                        <TextListItem component={TextListItemVariants.dt}>Business objective</TextListItem>
-                        <TextListItem component={TextListItemVariants.dd}>{ businessObjective }</TextListItem>
-                    </React.Fragment>
-                }
-                <TextListItem component={TextListItemVariants.dt}>No. of rules</TextListItem>
-                <TextListItem component={TextListItemVariants.dd}>{ rulesCount }</TextListItem>
-                <TextListItem component={TextListItemVariants.dt}>No. of systems</TextListItem>
-                <TextListItem component={TextListItemVariants.dd}>
-                    { systemsCount > 0 ? systemsCount : <SystemsCountWarning variant="compact" count={ systemsCount } /> }
-                </TextListItem>
-            </TextList>
-        </TextContent>
-    );
-};
+  name,
+  businessObjective,
+  complianceThreshold,
+  parentProfileName,
+  osMinorVersionCounts,
+  osMajorVersion,
+}) => (
+  <TextContent>
+    <Text component={TextVariants.h1}>Review</Text>
+    <Text>Review your SCAP policy before finishing.</Text>
+    <Text component={TextVariants.h3}>{name}</Text>
+    <TextList component={TextListVariants.dl} className="pf-u-mt-md">
+      <TextListItem component={TextListItemVariants.dt}>
+        Policy type
+      </TextListItem>
+      <TextListItem component={TextListItemVariants.dd}>
+        {parentProfileName}
+      </TextListItem>
+      <TextListItem component={TextListItemVariants.dt}>
+        Compliance threshold
+      </TextListItem>
+      <TextListItem component={TextListItemVariants.dd}>
+        {complianceThreshold}%
+      </TextListItem>
+      {businessObjective && (
+        <React.Fragment>
+          <TextListItem component={TextListItemVariants.dt}>
+            Business objective
+          </TextListItem>
+          <TextListItem component={TextListItemVariants.dd}>
+            {businessObjective}
+          </TextListItem>
+        </React.Fragment>
+      )}
+      <TextListItem component={TextListItemVariants.dt}>Systems</TextListItem>
+      <TextListItem component={TextListItemVariants.dd}>
+        <TextList component={TextListVariants.dl}>
+          {osMinorVersionCounts.map(({ osMinorVersion, count }) => (
+            <React.Fragment key={osMinorVersion}>
+              <TextListItem
+                component={TextListItemVariants.dt}
+                style={{ fontWeight: 'normal' }}
+              >
+                RHEL {osMajorVersion}.{osMinorVersion}
+              </TextListItem>
+              <TextListItem component={TextListItemVariants.dd}>
+                <Label color="grey" isCompact={true}>
+                  {count} {count > 1 ? 'systems' : 'system'}
+                </Label>
+              </TextListItem>
+            </React.Fragment>
+          ))}
+        </TextList>
+      </TextListItem>
+    </TextList>
+  </TextContent>
+);
 
 ReviewCreatedPolicy.propTypes = {
-    benchmarkId: propTypes.string,
-    refId: propTypes.string,
-    name: propTypes.string,
-    businessObjective: propTypes.string,
-    systemsCount: propTypes.number,
-    rulesCount: propTypes.number,
-    complianceThreshold: propTypes.number,
-    parentProfileName: propTypes.string
+  benchmarkId: propTypes.string,
+  refId: propTypes.string,
+  name: propTypes.string,
+  businessObjective: propTypes.string,
+  complianceThreshold: propTypes.number,
+  parentProfileName: propTypes.string,
+  osMinorVersionCounts: propTypes.arrayOf(
+    propTypes.shape({
+      osMinorVersion: propTypes.number,
+      count: propTypes.number,
+    })
+  ),
+  osMajorVersion: propTypes.string.isRequired,
 };
 
 const selector = formValueSelector('policyForm');
 
-export default connect(
-    state => ({
-        benchmarkId: selector(state, 'benchmark'),
-        refId: selector(state, 'refId'),
-        name: selector(state, 'name'),
-        businessObjective: selector(state, 'businessObjective'),
-        systemsCount: selector(state, 'systems').length,
-        complianceThreshold: parseFloat(selector(state, 'complianceThreshold')) || 100.0,
-        parentProfileName: JSON.parse(selector(state, 'profile')).name,
-        rulesCount: selector(state, 'selectedRuleRefIds').length
-    })
-)(ReviewCreatedPolicy);
+export default connect((state) => ({
+  benchmarkId: selector(state, 'benchmark'),
+  refId: selector(state, 'refId'),
+  name: selector(state, 'name'),
+  businessObjective: selector(state, 'businessObjective'),
+  osMinorVersionCounts: selector(state, 'osMinorVersionCounts'),
+  complianceThreshold:
+    parseFloat(selector(state, 'complianceThreshold')) || 100.0,
+  parentProfileName: selector(state, 'profile').name,
+  rulesCount: selector(state, 'selectedRuleRefIds').length,
+}))(ReviewCreatedPolicy);

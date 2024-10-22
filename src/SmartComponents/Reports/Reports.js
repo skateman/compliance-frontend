@@ -1,114 +1,107 @@
 import React, { useEffect } from 'react';
-import propTypes from 'prop-types';
 import { useLocation } from 'react-router-dom';
-import { useQuery } from '@apollo/react-hooks';
-import gql from 'graphql-tag';
-import PageHeader, { PageHeaderTitle } from '@redhat-cloud-services/frontend-components/PageHeader';
-import Main from '@redhat-cloud-services/frontend-components/Main';
+import { useQuery } from '@apollo/client';
+import PageHeader, {
+  PageHeaderTitle,
+} from '@redhat-cloud-services/frontend-components/PageHeader';
+
 import SkeletonTable from '@redhat-cloud-services/frontend-components/SkeletonTable';
 import {
-    ReportCardGrid, ReportsTable, StateViewPart, StateViewWithError, ReportsEmptyState, LoadingComplianceCards
+  ReportsTable,
+  StateViewPart,
+  StateViewWithError,
+  ReportsEmptyState,
 } from 'PresentationalComponents';
-import useFeature from 'Utilities/hooks/useFeature';
+import TableStateProvider from '@/Frameworks/AsyncTableTools/components/TableStateProvider';
+import PropTypes from 'prop-types';
+import { useReports } from '@/Utilities/hooks/api/useReports';
+import dataSerialiser from '@/Utilities/dataSerialiser';
+import { QUERY } from './constants';
+import { reportDataMap as dataMap } from '../../constants';
+import GatedComponents from '@/PresentationalComponents/GatedComponents';
 
-const QUERY = gql`
-query Profiles($filter: String!) {
-    profiles(search: $filter, limit: 1000){
-        edges {
-            node {
-                id
-                name
-                refId
-                description
-                policyType
-                totalHostCount
-                testResultHostCount
-                compliantHostCount
-                unsupportedHostCount
-                majorOsVersion
-                ssgVersion
-                complianceThreshold
-                businessObjective {
-                    id
-                    title
-                }
-                policy {
-                    id
-                    name
-                    benchmark {
-                        id
-                        version
-                    }
-                }
-                benchmark {
-                    id
-                    version
-                }
-            }
-        }
-
-    }
-}
-`;
-
-const profilesFromEdges = (data) => (
-    (data?.profiles?.edges || []).map((profile) => (
-        profile.node
-    ))
-);
-
-const LoadingView = ({ showTableView }) => (
-    showTableView ? <SkeletonTable colSize={ 3 } rowSize={ 10 } /> : <LoadingComplianceCards />
-);
-
-LoadingView.propTypes = {
-    showTableView: propTypes.bool
-};
+const profilesFromEdges = (data) =>
+  (data?.profiles?.edges || []).map((profile) => profile.node);
 
 const ReportsHeader = () => (
-    <PageHeader>
-        <PageHeaderTitle title="Reports" />
-    </PageHeader>
+  <PageHeader>
+    <PageHeaderTitle title="Reports" />
+  </PageHeader>
 );
 
-export const Reports = () => {
-    let profiles = [];
-    let showView = false;
-    const location = useLocation();
-    const showTableView = useFeature('reportsTableView');
-    const View = showTableView ? ReportsTable : ReportCardGrid;
-    const filter = `(has_policy_test_results = true AND external = false)
-                    OR (has_policy = false AND has_test_results = true)`;
-
-    let { data, error, loading, refetch } = useQuery(QUERY, {
-        variables: { filter }
-    });
-
-    useEffect(() => {
-        refetch();
-    }, [location, refetch]);
-
-    if (data) {
-        profiles = profilesFromEdges(data);
-        error = undefined;
-        loading = undefined;
-        showView = profiles && profiles.length > 0;
-    }
-
-    return <StateViewWithError stateValues={ { error, data, loading } }>
-        <StateViewPart stateKey='loading'>
-            <ReportsHeader />
-            <Main>
-                <LoadingView { ...{ showTableView } } />
-            </Main>
+export const ReportsBase = ({ data, loading, error }) => {
+  const showView = data && data.length > 0;
+  return (
+    <>
+      <ReportsHeader />
+      <StateViewWithError stateValues={{ error, data, loading }}>
+        <StateViewPart stateKey="loading">
+          <section className="pf-v5-c-page__main-section">
+            <SkeletonTable colSize={3} rowSize={10} />
+          </section>
         </StateViewPart>
-        <StateViewPart stateKey='data'>
-            <ReportsHeader />
-            <Main>
-                { showView ? <View { ...{ profiles } } /> : <ReportsEmptyState /> }
-            </Main>
+        <StateViewPart stateKey="data">
+          <section className="pf-v5-c-page__main-section">
+            {showView ? <ReportsTable reports={data} /> : <ReportsEmptyState />}
+          </section>
         </StateViewPart>
-    </StateViewWithError>;
+      </StateViewWithError>
+    </>
+  );
 };
 
-export default Reports;
+ReportsBase.propTypes = {
+  data: PropTypes.array,
+  error: PropTypes.string,
+  loading: PropTypes.bool,
+};
+
+//deprecated component
+const ReportsWithGrahpQL = () => {
+  let profiles = [];
+  const location = useLocation();
+  const filter = `has_policy_test_results = true AND external = false`;
+
+  let { data, error, loading, refetch } = useQuery(QUERY, {
+    variables: { filter },
+  });
+
+  useEffect(() => {
+    refetch();
+  }, [location, refetch]);
+
+  if (data) {
+    profiles = profilesFromEdges(data);
+    error = undefined;
+    loading = undefined;
+  }
+
+  return <ReportsBase {...{ data: profiles, error, loading, refetch }} />;
+};
+
+const ReportsWithRest = () => {
+  let { data: { data } = {}, error, loading, refetch } = useReports();
+
+  if (data) {
+    data = dataSerialiser(data, dataMap);
+    error = undefined;
+    loading = undefined;
+  }
+
+  return <ReportsBase {...{ data, error, loading, refetch }} />;
+};
+
+const ReportsWrapper = () => (
+  <GatedComponents
+    RestComponent={ReportsWithRest}
+    GraphQLComponent={ReportsWithGrahpQL}
+  />
+);
+
+const ReportsWithTableStateProvider = () => (
+  <TableStateProvider>
+    <ReportsWrapper />
+  </TableStateProvider>
+);
+
+export default ReportsWithTableStateProvider;
