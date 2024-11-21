@@ -1,66 +1,98 @@
-import { useQuery } from '@apollo/react-hooks';
+import { render, screen } from '@testing-library/react';
+import '@testing-library/jest-dom';
+import TestWrapper from '@redhat-cloud-services/frontend-components-utilities/TestingUtils/JestUtils/TestWrapper.js';
 
-import { Reports } from './Reports.js';
+import { useQuery } from '@apollo/client';
+import { profiles } from '@/__fixtures__/profiles.js';
 
-jest.mock('@apollo/react-hooks');
-jest.mock('react-router-dom', () => ({
-    ...jest.requireActual('react-router-dom'),
-    useLocation: jest.fn(() => ({}))
-}));
+import useAPIV2FeatureFlag from '@/Utilities/hooks/useAPIV2FeatureFlag.js';
+import Reports from './Reports.js';
 
-describe('Reports', () => {
-    it('expect to render without error', () => {
-        useQuery.mockImplementation(() => ({
-            data: {
-                profiles: {
-                    edges: [
-                        {
-                            node: {
-                                id: '1',
-                                refId: '121212',
-                                name: 'profile1',
-                                description: 'profile description',
-                                testResultHostCount: 1,
-                                complianceThreshold: 1,
-                                compliantHostCount: 1,
-                                businessObjective: {
-                                    id: '1',
-                                    title: 'BO 1'
-                                }
-                            }
-                        }
-                    ]
-                }
-            }, error: false, loading: false
-        }));
+jest.mock('@apollo/client');
+jest.mock('@/Utilities/hooks/useAPIV2FeatureFlag');
+jest.mock('@/Utilities/hooks/api/useReports');
 
-        const wrapper = shallow(
-            <Reports />
-        );
+describe('Reports - GraphQL', () => {
+  beforeEach(() => {
+    useAPIV2FeatureFlag.mockImplementation(() => false);
+  });
 
-        expect(toJson(wrapper)).toMatchSnapshot();
-    });
+  const queryResultDefaults = {
+    error: undefined,
+    loading: undefined,
+    data: undefined,
+    refetch: jest.fn(),
+  };
 
-    it('expect to render emptystate', () => {
-        useQuery.mockImplementation(() => ({
-            data: {
-                profiles: { edges: [] }
-            }, error: false, loading: false }));
+  it('expect to render properly and show the profile(s)', () => {
+    useQuery.mockImplementation(() => ({
+      ...queryResultDefaults,
+      data: profiles,
+    }));
+    render(
+      <TestWrapper>
+        <Reports />
+      </TestWrapper>
+    );
 
-        const wrapper = shallow(
-            <Reports />
-        );
+    expect(screen.getAllByText('PCI-DSS').length).toEqual(10);
+  });
 
-        expect(toJson(wrapper)).toMatchSnapshot();
-    });
+  it('expect to render emptystate', () => {
+    useQuery.mockImplementation(() => ({
+      ...queryResultDefaults,
+      data: {
+        profiles: { edges: [] },
+      },
+    }));
+    render(
+      <TestWrapper>
+        <Reports />
+      </TestWrapper>
+    );
 
-    it('expect to render loading', () => {
-        useQuery.mockImplementation(() => ({ data: undefined, error: false, loading: true }));
-        const wrapper = shallow(
-            <Reports />
-        );
+    expect(
+      screen.getByRole('button', { name: 'Create new policy' })
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('link', { name: 'Learn about OpenSCAP and Compliance' })
+    ).toBeInTheDocument();
+  });
 
-        expect(toJson(wrapper)).toMatchSnapshot();
-    });
+  it('expect to render loading', () => {
+    useQuery.mockImplementation(() => ({
+      ...queryResultDefaults,
+      loading: true,
+    }));
+    render(
+      <TestWrapper>
+        <Reports />
+      </TestWrapper>
+    );
 
+    expect(screen.getByLabelText('Loading')).toBeInTheDocument();
+  });
+});
+
+describe('Reports - REST', () => {
+  beforeEach(() => {
+    useAPIV2FeatureFlag.mockImplementation(() => true);
+  });
+
+  it('should use REST api', () => {
+    useQuery.mockImplementation(() => ({
+      data: [],
+      loading: false,
+      error: null,
+      refetch: () => {},
+    }));
+
+    render(
+      <TestWrapper>
+        <Reports />
+      </TestWrapper>
+    );
+
+    expect(useQuery).toHaveBeenCalled();
+  });
 });

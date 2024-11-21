@@ -1,203 +1,31 @@
-import { init } from 'Store';
-import logger from 'redux-logger';
-
-import { SystemsTable } from './SystemsTable';
-
-const items = {
-    data: {
-        systems: {
-            totalCount: 1,
-            edges: [
-                {
-                    node: {
-                        id: 1
-                    }
-                }
-            ]
-        }
-    }
-};
+import { render, screen } from '@testing-library/react';
+import '@testing-library/jest-dom';
+import TestWrapper from '@/Utilities/TestWrapper';
+import { SystemsTable } from './SystemsTableRest';
+jest.mock('@/Utilities/hooks/useAPIV2FeatureFlag', () => jest.fn(() => false));
 
 describe('SystemsTable', () => {
-    const store = init(logger).getStore();
-    const client = { query: jest.fn(() => Promise.resolve(items)) };
-    const updateSystemsFunction = jest.fn(jest.fn(() => Promise.resolve(items)));
-    const updateRowsFunction = jest.fn(jest.fn(() => Promise.resolve(items)));
-    const defaultProps = {
-        store,
-        client,
-        updateSystems: updateSystemsFunction,
-        updateRows: updateRowsFunction,
-        clearInventoryFilter: jest.fn()
-    };
-    const MockComponent = jest.fn(({ children, loaded }) => {
-        return children && loaded ? children : 'Loading...';
-    });
+  it('returns an Inventory Table', () => {
+    render(
+      <TestWrapper>
+        <SystemsTable />
+      </TestWrapper>
+    );
 
-    beforeEach(() => {
-        global.insights = {
-            loadInventory: jest.fn(() => {
-                return Promise.resolve({
-                    inventoryConnector: () => ({
-                        InventoryTable: MockComponent
-                    }),
-                    INVENTORY_ACTION_TYPES: {},
-                    mergeWithEntities: () => ({})
-                });
-            })
-        };
-    });
+    expect(screen.getByLabelText('Inventory Table')).toBeInTheDocument();
+  });
 
-    it('expect to render a loading state', () => {
-        const component = shallow(
-            <SystemsTable client={ client } />
-        );
+  it('returns an Inventory Table', () => {
+    render(
+      <TestWrapper>
+        <SystemsTable error={{ message: 'Error' }} />
+      </TestWrapper>
+    );
 
-        expect(toJson(component)).toMatchSnapshot();
-    });
+    expect(
+      screen.getByRole('heading', { name: 'Something went wrong' })
+    ).toBeInTheDocument();
+  });
 
-    it('expect to not render a loading state', () => {
-        const wrapper = shallow(
-            <SystemsTable { ...defaultProps } systems={ items.data.systems.edges } total= { 1 } />
-        );
-
-        expect(toJson(wrapper)).toMatchSnapshot();
-    });
-
-    it('expect to not show actions if showActions is false', () => {
-        const wrapper = shallow(
-            <SystemsTable { ...defaultProps } showActions={false} systems={ items.data.systems.edges } total= { 1 } />
-        );
-
-        expect(toJson(wrapper)).toMatchSnapshot();
-    });
-
-    it('expect to show actions if showActions is true or by default', () => {
-        const wrapper = shallow(
-            <SystemsTable { ...defaultProps } systems={ items.data.systems.edges } total= { 1 } />
-        );
-
-        expect(toJson(wrapper)).toMatchSnapshot();
-    });
-
-    it('expect to set compliant filters when enabled', () => {
-        const wrapper = shallow(
-            <SystemsTable { ...defaultProps }
-                systems={ items.data.systems.edges }
-                total= { 1 }
-                compliantFilter={ true } />
-        );
-
-        expect(toJson(wrapper)).toMatchSnapshot();
-    });
-
-    it('expect to set isDisable on export config to true total is 0', () => {
-        const wrapper = shallow(
-            <SystemsTable { ...defaultProps }
-                systems={ items.data.systems.edges }
-                total= { 0 } />
-        );
-
-        expect(toJson(wrapper)).toMatchSnapshot();
-    });
-
-    it('expect to set isDisable on export config to false total is 0 but selected is not', () => {
-        const wrapper = shallow(
-            <SystemsTable { ...defaultProps }
-                systems={ items.data.systems.edges }
-                total= { 0 }
-                selectedEntities={ [1] } />
-        );
-
-        expect(toJson(wrapper)).toMatchSnapshot();
-    });
-
-    it('expect to set loading state correctly on updateSystems', async () => {
-        const wrapper = shallow(
-            <SystemsTable { ...defaultProps } />
-        );
-
-        await wrapper.instance().updateSystems();
-        expect(toJson(wrapper)).toMatchSnapshot();
-    });
-
-    describe('Instance functions', () => {
-        const exportFunction = jest.fn();
-        let wrapper;
-        let instance;
-
-        beforeEach(() =>{
-            wrapper = shallow(
-                <SystemsTable { ...defaultProps } exportFromState={ exportFunction } />
-            );
-            instance = wrapper.instance();
-        });
-
-        describe('#onExportSelect', () => {
-            it('expect to dispatch calls to export functions per arguments', () => {
-                instance.onExportSelect('_', 'csv');
-                expect(exportFunction).toHaveBeenCalledWith('csv');
-
-                instance.onExportSelect('_', 'json');
-                expect(exportFunction).toHaveBeenCalledWith('json');
-            });
-        });
-
-        describe('#onFilterUpdate', () => {
-            it('set search in state properly', () => {
-                expect(wrapper.state().activeFilters).toMatchSnapshot();
-                instance.onFilterUpdate('name', 'SEARCH TERM');
-                expect(wrapper.state().activeFilters).toMatchSnapshot();
-            });
-
-            it('set search in state properly', () => {
-                expect(wrapper.state().activeFilters).toMatchSnapshot();
-                instance.onFilterUpdate('compliancescore',
-                    ['0-49', '50-69', '90-100']
-                );
-
-                expect(wrapper.state().activeFilters).toMatchSnapshot();
-            });
-        });
-
-        describe('#deleteFilter', () => {
-            beforeEach(() => {
-                instance.clearAllFilter();
-            });
-
-            it('set search in state properly', () => {
-                instance.onFilterUpdate('compliancescore',
-                    ['0-49', '50-69', '70-89', '90-100']
-                );
-                const prevState = wrapper.state().activeFilters;
-                expect(prevState).toMatchSnapshot();
-                instance.deleteFilter({
-                    category: 'Compliance score',
-                    chips: [
-                        { name: '70 - 89%' }
-                    ]
-                });
-
-                expect(wrapper.state()).not.toEqual(prevState);
-                expect(wrapper.state().activeFilters).toMatchSnapshot();
-            });
-
-            it('set search in state properly', () => {
-                instance.onFilterUpdate('compliant',
-                    ['false']
-                );
-                const prevState = wrapper.state().activeFilters;
-                expect(prevState).toMatchSnapshot();
-                instance.deleteFilter({
-                    category: 'Compliant',
-                    chips: [
-                        { name: 'Non-compliant' }
-                    ]
-                });
-
-                expect(wrapper.state()).not.toEqual(prevState);
-                expect(wrapper.state().activeFilters).toMatchSnapshot();
-            });
-        });
-    });
+  // TODO There should also be a test to verify the empty state
 });

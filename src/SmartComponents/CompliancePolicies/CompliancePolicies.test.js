@@ -1,92 +1,100 @@
-import { useQuery } from '@apollo/react-hooks';
+import { render, screen } from '@testing-library/react';
+import { within } from '@testing-library/react';
+import '@testing-library/jest-dom';
+
+import propTypes from 'prop-types';
+import { MemoryRouter } from 'react-router-dom';
+import { useQuery } from '@apollo/client';
+
 import { profiles } from '@/__fixtures__/profiles.js';
+import CompliancePolicies from './CompliancePolicies.js';
+import useAPIV2FeatureFlag from '../../Utilities/hooks/useAPIV2FeatureFlag';
 
-jest.mock('@apollo/react-hooks');
-jest.mock('react-router-dom');
+jest.mock('@apollo/client');
+jest.mock('../../Utilities/hooks/useAPIV2FeatureFlag');
 
-window.insights = {
-    chrome: { isBeta: jest.fn(() => true) }
-};
-
-import { CompliancePolicies } from './CompliancePolicies.js';
-
-window.insights = {
-    chrome: { isBeta: jest.fn(() => true) }
-};
-
-jest.mock('react-router-dom', () => ({
-    ...jest.requireActual('react-router-dom'),
-    useLocation: jest.fn(() => ({}))
-}));
+const TestWrapper = ({ children }) => <MemoryRouter>{children}</MemoryRouter>;
+TestWrapper.propTypes = { children: propTypes.node };
 
 describe('CompliancePolicies', () => {
-    it('expect to render without error', () => {
-        useQuery.mockImplementation(() => ({
-            data: {
-                profiles: {
-                    edges: [{
-                        id: '1',
-                        refId: '121212',
-                        name: 'profile1',
-                        complianceThreshold: 90.0,
-                        businessObjective: {
-                            id: '1',
-                            title: 'BO 1'
-                        }
-                    }]
-                }
-            }, error: undefined, loading: undefined }));
+  const queryRefetch = jest.fn();
+  const queryDefaults = {
+    error: undefined,
+    loading: undefined,
+    refetch: queryRefetch,
+  };
 
-        const wrapper = shallow(
-            <CompliancePolicies />
-        );
+  beforeEach(() => {
+    useAPIV2FeatureFlag.mockImplementation(() => false);
+  });
 
-        expect(toJson(wrapper)).toMatchSnapshot();
-    });
+  it('expect to render without error', () => {
+    useQuery.mockImplementation(() => ({
+      ...queryDefaults,
+      data: profiles,
+    }));
 
-    it('expect to render emptystate', () => {
-        useQuery.mockImplementation(() => ({
-            data: {
-                profiles: {
-                    edges: []
-                }
-            }, error: undefined, loading: undefined }));
+    render(
+      <TestWrapper>
+        <CompliancePolicies />
+      </TestWrapper>
+    );
 
-        const wrapper = shallow(
-            <CompliancePolicies />
-        );
+    expect(
+      within(screen.getByLabelText('Policies')).queryAllByRole('row').length
+    ).toEqual(11);
+  });
 
-        expect(toJson(wrapper)).toMatchSnapshot();
-    });
+  it('expect to render emptystate', () => {
+    useQuery.mockImplementation(() => ({
+      ...queryDefaults,
+      data: {
+        profiles: {
+          edges: [],
+        },
+      },
+    }));
 
-    it('expect to render an error', () => {
-        const error = {
-            networkError: { statusCode: 500 },
-            error: 'Test Error loading'
-        };
-        useQuery.mockImplementation(() => ({ data: undefined, error, loading: undefined }));
-        const wrapper = shallow(
-            <CompliancePolicies />
-        );
+    render(
+      <TestWrapper>
+        <CompliancePolicies />
+      </TestWrapper>
+    );
 
-        expect(toJson(wrapper)).toMatchSnapshot();
-    });
+    expect(screen.getByText('No policies')).toBeInTheDocument();
+  });
 
-    it('expect to render loading', () => {
-        useQuery.mockImplementation(() => ({ data: undefined, error: undefined, loading: true }));
-        const wrapper = shallow(
-            <CompliancePolicies />
-        );
+  it('expect to render an error', () => {
+    const error = {
+      networkError: { statusCode: 500 },
+      error: 'Test Error loading',
+    };
+    useQuery.mockImplementation(() => ({
+      ...queryDefaults,
+      error,
+    }));
 
-        expect(toJson(wrapper)).toMatchSnapshot();
-    });
+    render(
+      <TestWrapper>
+        <CompliancePolicies />
+      </TestWrapper>
+    );
 
-    it('expect to render a policies table', () => {
-        useQuery.mockImplementation(() => ({ data: profiles, error: undefined, loading: undefined }));
-        const wrapper = shallow(
-            <CompliancePolicies />
-        );
+    expect(screen.getByText('Something went wrong')).toBeInTheDocument();
+  });
 
-        expect(toJson(wrapper)).toMatchSnapshot();
-    });
+  it('expect to render loading', () => {
+    useQuery.mockImplementation(() => ({
+      ...queryDefaults,
+      loading: true,
+    }));
+
+    render(
+      <TestWrapper>
+        <CompliancePolicies />
+      </TestWrapper>
+    );
+
+    expect(screen.getByLabelText('Policies loading')).toBeInTheDocument(1);
+  });
 });

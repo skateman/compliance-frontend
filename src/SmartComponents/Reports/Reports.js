@@ -1,114 +1,171 @@
-import React, { useEffect } from 'react';
-import propTypes from 'prop-types';
+import React, { useCallback, useEffect } from 'react';
+import PropTypes from 'prop-types';
 import { useLocation } from 'react-router-dom';
-import { useQuery } from '@apollo/react-hooks';
-import gql from 'graphql-tag';
-import PageHeader, { PageHeaderTitle } from '@redhat-cloud-services/frontend-components/PageHeader';
-import Main from '@redhat-cloud-services/frontend-components/Main';
+import { useQuery } from '@apollo/client';
+import PageHeader, {
+  PageHeaderTitle,
+} from '@redhat-cloud-services/frontend-components/PageHeader';
 import SkeletonTable from '@redhat-cloud-services/frontend-components/SkeletonTable';
 import {
-    ReportCardGrid, ReportsTable, StateViewPart, StateViewWithError, ReportsEmptyState, LoadingComplianceCards
+  ReportsTable,
+  StateViewPart,
+  StateViewWithError,
+  ReportsEmptyState,
 } from 'PresentationalComponents';
-import useFeature from 'Utilities/hooks/useFeature';
+import GatedComponents from '@/PresentationalComponents/GatedComponents';
+import TableStateProvider from '@/Frameworks/AsyncTableTools/components/TableStateProvider';
+import useComplianceQuery from 'Utilities/hooks/api/useComplianceQuery';
+import useReportsOS from 'Utilities/hooks/api/useReportsOs';
+import dataSerialiser from 'Utilities/dataSerialiser';
+import { reportDataMap as dataMap } from '../../constants';
+import { uniq } from 'Utilities/helpers';
+import { QUERY } from './constants';
+import useExporter from '@/Frameworks/AsyncTableTools/hooks/useExporter';
 
-const QUERY = gql`
-query Profiles($filter: String!) {
-    profiles(search: $filter, limit: 1000){
-        edges {
-            node {
-                id
-                name
-                refId
-                description
-                policyType
-                totalHostCount
-                testResultHostCount
-                compliantHostCount
-                unsupportedHostCount
-                majorOsVersion
-                ssgVersion
-                complianceThreshold
-                businessObjective {
-                    id
-                    title
-                }
-                policy {
-                    id
-                    name
-                    benchmark {
-                        id
-                        version
-                    }
-                }
-                benchmark {
-                    id
-                    version
-                }
-            }
-        }
-
-    }
-}
-`;
-
-const profilesFromEdges = (data) => (
-    (data?.profiles?.edges || []).map((profile) => (
-        profile.node
-    ))
-);
-
-const LoadingView = ({ showTableView }) => (
-    showTableView ? <SkeletonTable colSize={ 3 } rowSize={ 10 } /> : <LoadingComplianceCards />
-);
-
-LoadingView.propTypes = {
-    showTableView: propTypes.bool
-};
+const profilesFromEdges = (data) =>
+  (data?.profiles?.edges || []).map((profile) => profile.node);
 
 const ReportsHeader = () => (
-    <PageHeader>
-        <PageHeaderTitle title="Reports" />
-    </PageHeader>
+  <PageHeader>
+    <PageHeaderTitle title="Reports" />
+  </PageHeader>
 );
 
-export const Reports = () => {
-    let profiles = [];
-    let showView = false;
-    const location = useLocation();
-    const showTableView = useFeature('reportsTableView');
-    const View = showTableView ? ReportsTable : ReportCardGrid;
-    const filter = `(has_policy_test_results = true AND external = false)
-                    OR (has_policy = false AND has_test_results = true)`;
-
-    let { data, error, loading, refetch } = useQuery(QUERY, {
-        variables: { filter }
-    });
-
-    useEffect(() => {
-        refetch();
-    }, [location, refetch]);
-
-    if (data) {
-        profiles = profilesFromEdges(data);
-        error = undefined;
-        loading = undefined;
-        showView = profiles && profiles.length > 0;
-    }
-
-    return <StateViewWithError stateValues={ { error, data, loading } }>
-        <StateViewPart stateKey='loading'>
-            <ReportsHeader />
-            <Main>
-                <LoadingView { ...{ showTableView } } />
-            </Main>
+export const ReportsBase = ({ data, loading, error, operatingSystems }) => {
+  const showView = data && data.length > 0;
+  return (
+    <>
+      <ReportsHeader />
+      <StateViewWithError stateValues={{ error, data, loading }}>
+        <StateViewPart stateKey="loading">
+          <section className="pf-v5-c-page__main-section">
+            <SkeletonTable colSize={3} rowSize={10} />
+          </section>
         </StateViewPart>
-        <StateViewPart stateKey='data'>
-            <ReportsHeader />
-            <Main>
-                { showView ? <View { ...{ profiles } } /> : <ReportsEmptyState /> }
-            </Main>
+        <StateViewPart stateKey="data">
+          <section className="pf-v5-c-page__main-section">
+            {showView ? (
+              <ReportsTable
+                reports={data}
+                operatingSystems={operatingSystems}
+              />
+            ) : (
+              <ReportsEmptyState />
+            )}
+          </section>
         </StateViewPart>
-    </StateViewWithError>;
+      </StateViewWithError>
+    </>
+  );
 };
 
-export default Reports;
+ReportsBase.propTypes = {
+  data: PropTypes.array,
+  operatingSystems: PropTypes.array,
+  error: PropTypes.string,
+  loading: PropTypes.bool,
+};
+
+//deprecated component
+const ReportsWithGrahpQL = () => {
+  let profiles = [];
+  const location = useLocation();
+  const filter = `has_policy_test_results = true AND external = false`;
+
+  let { data, error, loading, refetch } = useQuery(QUERY, {
+    variables: { filter },
+  });
+
+  useEffect(() => {
+    refetch();
+  }, [location, refetch]);
+
+  if (data) {
+    profiles = profilesFromEdges(data);
+    error = undefined;
+    loading = undefined;
+  }
+  const operatingSystems =
+    data &&
+    uniq(
+      profiles?.map(({ osMajorVersion }) => osMajorVersion).filter((i) => !!i)
+    );
+  const policyTypes =
+    data &&
+    uniq(profiles?.map(({ policyType }) => policyType).filter((i) => !!i));
+
+  return (
+    <ReportsBase
+      {...{
+        data: profiles,
+        operatingSystems,
+        policyTypes,
+        error,
+        loading,
+        refetch,
+      }}
+    />
+  );
+};
+
+const ReportsWithRest = () => {
+  const { data: operatingSystems } = useReportsOS();
+  const {
+    data: { data: reportsData, meta: { total } = {} } = {},
+    error,
+    loading: reportsLoading,
+    fetch: fetchReports,
+  } = useComplianceQuery('reports', {
+    params: { filter: 'with_reported_systems = true' },
+    useTableState: true,
+    debounced: false,
+  });
+  const fetchForExport = useCallback(
+    async (offset, limit) => await fetchReports({ offset, limit }, false),
+    [fetchReports]
+  );
+  const reportsExporter = useExporter(fetchForExport);
+  const serialisedData = reportsData && dataSerialiser(reportsData, dataMap);
+  const data = operatingSystems;
+  const loading = !data ? true : undefined;
+
+  return (
+    <StateViewWithError stateValues={{ error, data, loading }}>
+      <StateViewPart stateKey="loading">
+        <section className="pf-v5-c-page__main-section">
+          <SkeletonTable colSize={3} rowSize={10} />
+        </section>
+      </StateViewPart>
+      <StateViewPart stateKey="data">
+        <ReportsHeader />
+        <section className="pf-v5-c-page__main-section">
+          <ReportsTable
+            reports={serialisedData}
+            operatingSystems={operatingSystems}
+            total={total}
+            loading={reportsLoading}
+            options={{
+              exporter: async () =>
+                dataSerialiser(await reportsExporter(), dataMap),
+            }}
+          />
+        </section>
+      </StateViewPart>
+    </StateViewWithError>
+  );
+};
+
+const ReportsWithTableStateProvider = () => (
+  <TableStateProvider>
+    <ReportsWithRest />
+  </TableStateProvider>
+);
+
+const ReportsWrapper = () => (
+  <GatedComponents
+    RestComponent={ReportsWithTableStateProvider}
+    GraphQLComponent={ReportsWithGrahpQL}
+  />
+);
+
+export default ReportsWrapper;

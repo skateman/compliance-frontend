@@ -1,44 +1,60 @@
 import React from 'react';
 import propTypes from 'prop-types';
-import { Alert, Label, Tab, TabTitleText, PageSection, PageSectionVariants } from '@patternfly/react-core';
-import SystemRulesTable, {
-    selectColumns as selectRulesTableColumns
-} from '@redhat-cloud-services/frontend-components-inventory-compliance/SystemRulesTable';
-import { RoutedTabs } from 'PresentationalComponents';
+import { PageSection, PageSectionVariants } from '@patternfly/react-core';
+import { TabbedRules } from 'PresentationalComponents';
+import { mapCountOsMinorVersions } from 'Store/Reducers/SystemStore';
+import { sortingByProp } from 'Utilities/helpers';
+import * as Columns from '@/PresentationalComponents/RulesTable/Columns';
 
-const PolicyMultiversionRules = ({ policy: { policy: { profiles } } }) => (
+const PolicyMultiversionRules = ({
+  policy,
+  saveToPolicy,
+  onRuleValueReset,
+  DedicatedAction,
+}) => {
+  const {
+    hosts,
+    policy: { profiles },
+  } = policy;
+  const profilesForTabs = profiles.filter(
+    (profile) => !!profile.osMinorVersion
+  );
+  const systemCounts = mapCountOsMinorVersions(hosts);
+
+  const tabsData = profilesForTabs
+    .sort(sortingByProp('osMinorVersion', 'desc'))
+    .map((profile) => ({
+      profile,
+      systemCount: systemCounts[profile.osMinorVersion]?.count || 0,
+    }));
+
+  return (
     <React.Fragment>
-        <Alert variant="info" isInline title="Rule editing coming soon" />
-        <PageSection variant={ PageSectionVariants.light }>
-            <RoutedTabs level={ 1 } defaultTab={ profiles[0].ssgVersion }>
-                {
-                    profiles.map((profile) => (
-                        <Tab
-                            key={ `ssgversion-tab-${ profile.ssgVersion }` }
-                            title={
-                                <TabTitleText>
-                                    <span>SSG { profile.ssgVersion + ' ' }</span>
-                                    <Label color="blue">{ profile.rules.length }</Label>
-                                </TabTitleText>
-                            }
-                            eventKey={ profile.ssgVersion }>
-                            <SystemRulesTable
-                                remediationsEnabled={false}
-                                columns={ selectRulesTableColumns(['Rule', 'Severity', 'Ansible']) }
-                                profileRules={[{
-                                    profile: { ...profile },
-                                    rules: profile.rules
-                                }]} />
-                        </Tab>
-                    ))
-                }
-            </RoutedTabs>
-        </PageSection>
+      <PageSection variant={PageSectionVariants.light}>
+        <TabbedRules
+          tabsData={tabsData}
+          setRuleValues={saveToPolicy}
+          onRuleValueReset={onRuleValueReset}
+          ruleValues={Object.fromEntries(
+            profiles.map(({ id, values }) => [id, values])
+          )}
+          columns={[Columns.Name, Columns.Severity, Columns.Remediation]}
+          level={1}
+          options={{
+            dedicatedAction: DedicatedAction,
+          }}
+          ouiaId="RHELVersions"
+        />
+      </PageSection>
     </React.Fragment>
-);
+  );
+};
 
 PolicyMultiversionRules.propTypes = {
-    policy: propTypes.object.isRequired
+  policy: propTypes.object.isRequired,
+  saveToPolicy: propTypes.func,
+  onRuleValueReset: propTypes.func,
+  DedicatedAction: propTypes.node,
 };
 
 export default PolicyMultiversionRules;

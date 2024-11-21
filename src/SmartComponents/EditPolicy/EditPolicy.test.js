@@ -1,63 +1,36 @@
-import { useLocation } from 'react-router-dom';
-jest.mock('react-redux', () => ({
-    ...jest.requireActual('react-redux'),
-    useSelector: jest.fn(() => ({})),
-    useDispatch: jest.fn(() => ({}))
-}));
-jest.mock('./usePolicyUpdate', () => (() => {}));
-jest.mock('react-router-dom', () => ({
-    ...jest.requireActual('react-router-dom'),
-    useLocation: jest.fn(),
-    useHistory: jest.fn(() => ({}))
-}));
-jest.mock('Utilities/hooks/useDocumentTitle', () => ({
-    useTitleEntity: () => ({}),
-    setTitle: () => ({})
-}));
+import { render, screen } from '@testing-library/react';
+import '@testing-library/jest-dom';
+import TestWrapper from '@/Utilities/TestWrapper';
 
 import { EditPolicy } from './EditPolicy.js';
+jest.mock('Mutations');
+jest.mock('Utilities/hooks/useDocumentTitle', () => ({
+  useTitleEntity: () => ({}),
+  setTitle: () => ({}),
+}));
+
+import useAPIV2FeatureFlag from '../../Utilities/hooks/useAPIV2FeatureFlag';
+jest.mock('../../Utilities/hooks/useAPIV2FeatureFlag');
 
 describe('EditPolicy', () => {
+  beforeEach(() => {
+    useAPIV2FeatureFlag.mockImplementation(() => false);
+  });
+  const defaultProps = {
+    onClose: jest.fn(),
+    dispatch: jest.fn(),
+    change: jest.fn(),
+  };
 
-    const defaultProps = {
-        onClose: jest.fn(),
-        dispatch: jest.fn(),
-        change: jest.fn()
-    };
+  it('expect to render without error', () => {
+    render(
+      <TestWrapper>
+        <EditPolicy {...defaultProps} />
+      </TestWrapper>
+    );
 
-    beforeEach(() => {
-        useLocation.mockImplementation(() => ({
-            hash: '#details',
-            state: {
-                policy: {
-                    id: 'POLICY_ID',
-                    name: 'Policy Name',
-                    businessObjective: {
-                        title: 'BO title',
-                        id: 1
-                    },
-                    complianceThreshold: '30',
-                    hosts: []
-                }
-            }
-        }));
-    });
+    expect(screen.getByLabelText('Edit')).toBeInTheDocument();
+  });
 
-    it('expect to render without error', () => {
-        const wrapper = shallow(
-            <EditPolicy { ...defaultProps }/>
-        );
-
-        expect(toJson(wrapper)).toMatchSnapshot();
-    });
-
-    it('expect to render with active tab open', () => {
-        const wrapper = shallow(
-            <EditPolicy
-                { ...defaultProps }
-                activeTab={ 1 } />
-        );
-
-        expect(toJson(wrapper)).toMatchSnapshot();
-    });
+  // TODO Add test with proper mock data
 });

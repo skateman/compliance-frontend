@@ -2,31 +2,13 @@ version: '3'
 services:
     frontend:
         env_file: .env
-        build: .
+        build: ./Dockerfile.local
         image: compliance-frontend_frontend
-        ports:
-            - 8002:8002
+        network_mode: host
+        # Use ports instead of host network mode when on Docker for Mac or in a VM
+        #ports:
+        #  - 1337:1337
         volumes:
             - .:/compliance:z
-            - /compliance/node_modules
-
-    # Enable/uncomment this if you want to run chrome locally
-    # chrome:
-    #     env_file: .env
-    #     image: compliance-frontend_frontend
-    #     working_dir: /insights-chrome
-    #     entrypoint: /bin/sh
-    #     command: -c '
-    #         npm i;
-    #         npm run start'
-    #     volumes:
-    #         - ${CHROME_DIR}:/insights-chrome:z
-    #         - /insights-chrome/node_modules
-
-    proxy:
-        env_file: .env
-        image: docker.io/redhatinsights/insights-proxy
-        network_mode: host
-        volumes:
-          - ./config/spandx.config.js:/config/spandx.config.js:z
-          # - ${CHROME_DIR}/build:/chrome:z # local chrome
+            # Enable to speed up tests in the container
+            # - /compliance/node_modules/

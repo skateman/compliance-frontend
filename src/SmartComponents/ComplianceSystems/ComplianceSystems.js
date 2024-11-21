@@ -1,105 +1,161 @@
 /* eslint-disable react/display-name */
-import React, { useLayoutEffect } from 'react';
-import { useDispatch } from 'react-redux';
-import gql from 'graphql-tag';
-import { useQuery } from '@apollo/react-hooks';
-import PageHeader, { PageHeaderTitle } from '@redhat-cloud-services/frontend-components/PageHeader';
-import Main from '@redhat-cloud-services/frontend-components/Main';
+import React from 'react';
+import propTypes from 'prop-types';
+import { gql, useQuery } from '@apollo/client';
+import { nowrap } from '@patternfly/react-table';
+import PageHeader, {
+  PageHeaderTitle,
+} from '@redhat-cloud-services/frontend-components/PageHeader';
 import { StateViewPart, StateViewWithError } from 'PresentationalComponents';
-import { InventoryTable, SystemsTable } from 'SmartComponents';
-import { GET_SYSTEMS } from '../SystemsTable/constants';
-import { systemName, detailsLink, policiesCell } from 'Store/Reducers/SystemStore';
-import useFeature from 'Utilities/hooks/useFeature';
+import { SystemsTable } from 'SmartComponents';
+import * as Columns from '../SystemsTable/Columns';
+import useAPIV2FeatureFlag from '@/Utilities/hooks/useAPIV2FeatureFlag';
+import dataSerialiser from '@/Utilities/dataSerialiser';
+import { apiInstance } from '@/Utilities/hooks/useQuery';
+import { policiesDataMapper, systemsDataMapper } from '@/constants';
+import usePolicies from 'Utilities/hooks/api/usePolicies';
+import GatedComponents from '@/PresentationalComponents/GatedComponents';
+import { buildOSObject } from '../../Utilities/helpers';
 
-const QUERY = gql`
-{
+export const QUERY = gql`
+  {
     profiles(search: "external = false and canonical = false") {
-        edges {
-            node {
-                id
-                name
-                refId
-                majorOsVersion
-            }
+      edges {
+        node {
+          id
+          name
+          osMajorVersion
         }
+      }
     }
-}
+  }
 `;
 
-const DEFAULT_FILTER = 'has_test_results = true or has_policy = true';
+const DEFAULT_FILTER_GRAPHQL = 'has_test_results = true or has_policy = true';
+const DEFAULT_FILTER_REST = 'assigned_or_scanned=true';
 
-export const ComplianceSystems = () => {
-    const newInventory = useFeature('newInventory');
-    const { data, error, loading } = useQuery(QUERY);
-    const dispatch = useDispatch();
-    const columns = [{
-        key: 'facts.compliance.display_name',
-        title: 'Name',
-        props: {
-            width: 40, isStatic: true
-        },
-        ...newInventory && {
-            key: 'display_name',
-            renderFunc: systemName
-        }
-    }, {
-        key: 'facts.compliance.policies',
-        title: 'Policies',
-        props: {
-            width: 40, isStatic: true
-        },
-        ...newInventory && {
-            key: 'policyNames',
-            renderFunc: (policyNames) => {
-                const { title } = policiesCell({ policyNames }) || { title: '' };
-                return title;
-            }
-        }
-    }, {
-        key: 'facts.compliance.details_link',
-        title: '',
-        props: {
-            width: 20, isStatic: true
-        },
-        ...newInventory && {
-            key: 'testResultProfiles',
-            renderFunc: (data, id) => {
-                const { title } = detailsLink({ testResultProfiles: data, id }) || { title: '' };
-                return title;
-            }
-        }
-    }];
-    const policies = data?.profiles?.edges.map(({ node }) => node);
+const processSystemsData = (data) =>
+  dataSerialiser(
+    data.map((entry) => ({
+      ...entry,
+      policies: dataSerialiser(entry.policies, policiesDataMapper),
+    })),
+    systemsDataMapper
+  );
 
-    useLayoutEffect(() => { dispatch({ type: 'SELECT_ENTITIES', payload: { ids: [] } }); }, []);
+export const fetchApi = async (page, perPage, combinedVariables) =>
+  apiInstance
+    .systems(
+      undefined,
+      combinedVariables.tags,
+      perPage,
+      page,
+      combinedVariables.idsOnly,
+      combinedVariables.sortBy,
+      combinedVariables.filter
+    )
+    .then(({ data: { data = [], meta = {} } = {} } = {}) => ({
+      data: processSystemsData(data),
+      meta,
+    }));
 
-    const InvComponent = newInventory ? InventoryTable : SystemsTable;
+const fetchCustomOSes = ({ filters }) =>
+  apiInstance.systemsOS(null, filters).then(({ data }) => {
+    return {
+      results: buildOSObject(data),
+      total: data?.length || 0,
+    };
+  });
 
-    return (
-        <React.Fragment>
-            <PageHeader className='page-header'>
-                <PageHeaderTitle title="Systems" />
-            </PageHeader>
-            <Main>
-                <StateViewWithError stateValues={ { error, data, loading } }>
-                    <StateViewPart stateKey="data">
-                        { policies && <InvComponent
-                            query={GET_SYSTEMS}
-                            defaultFilter={ DEFAULT_FILTER }
-                            systemProps={{
-                                isFullView: true
-                            }}
-                            showOsFilter
-                            showComplianceSystemsInfo
-                            enableEditPolicy={ false }
-                            remediationsEnabled={ false }
-                            columns={ columns }
-                            policies={ policies } /> }
-                    </StateViewPart>
-                </StateViewWithError>
-            </Main>
-        </React.Fragment>
-    );
+const ComplianceSystemsBase = ({ error, data, loading, policies }) => {
+  const apiV2Enabled = useAPIV2FeatureFlag();
+
+  return (
+    <React.Fragment>
+      <PageHeader className="page-header">
+        <PageHeaderTitle title="Systems" />
+      </PageHeader>
+      <section className="pf-v5-c-page__main-section">
+        <StateViewWithError stateValues={{ error, data, loading }}>
+          <StateViewPart stateKey="data">
+            {policies && (
+              <SystemsTable
+                columns={[
+                  Columns.customName(
+                    {
+                      showLink: true,
+                    },
+                    { sortBy: apiV2Enabled ? ['display_name'] : ['name'] }
+                  ),
+                  Columns.inventoryColumn('groups', {
+                    requiresDefault: true,
+                    sortBy: ['groups'],
+                  }),
+                  Columns.inventoryColumn('tags'),
+                  Columns.OS(apiV2Enabled),
+                  Columns.Policies,
+                  Columns.inventoryColumn('updated', {
+                    props: { isStatic: true },
+                    transforms: [nowrap],
+                  }),
+                ]}
+                defaultFilter={
+                  apiV2Enabled ? DEFAULT_FILTER_REST : DEFAULT_FILTER_GRAPHQL
+                }
+                systemProps={{
+                  isFullView: true,
+                }}
+                showOsMinorVersionFilter={policies.map(
+                  (policy) => policy.osMajorVersion
+                )}
+                showComplianceSystemsInfo
+                enableEditPolicy={false}
+                remediationsEnabled={false}
+                policies={policies}
+                showGroupsFilter
+                fetchApi={fetchApi}
+                fetchCustomOSes={fetchCustomOSes}
+                apiV2Enabled={apiV2Enabled}
+              />
+            )}
+          </StateViewPart>
+        </StateViewWithError>
+      </section>
+    </React.Fragment>
+  );
 };
 
-export default ComplianceSystems;
+ComplianceSystemsBase.propTypes = {
+  data: propTypes.array.isRequired,
+  error: propTypes.object,
+  loading: propTypes.bool,
+  policies: propTypes.array.isRequired,
+};
+
+const ComplianceSystemsGraphQL = () => {
+  const { data, error, loading } = useQuery(QUERY);
+  const policies = data?.profiles?.edges.map(({ node }) => node);
+
+  return <ComplianceSystemsBase {...{ data, error, loading, policies }} />;
+};
+
+const ComplianceSystemsRest = () => {
+  let { data: { data } = {}, error, loading } = usePolicies();
+
+  if (data) {
+    data = dataSerialiser(data, policiesDataMapper);
+  }
+
+  return (
+    <ComplianceSystemsBase
+      {...{ data, error, loading, policies: data || [] }}
+    />
+  );
+};
+
+export default () => (
+  <GatedComponents
+    RestComponent={ComplianceSystemsRest}
+    GraphQLComponent={ComplianceSystemsGraphQL}
+  />
+);

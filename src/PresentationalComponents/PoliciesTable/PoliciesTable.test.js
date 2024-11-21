@@ -1,78 +1,56 @@
-import { policies as rawPolicies  } from '@/__fixtures__/policies.js';
+import { render, screen, waitFor } from '@testing-library/react';
+import { within } from '@testing-library/react';
+import '@testing-library/jest-dom';
+import TestWrapper from '@/Utilities/TestWrapper';
 
-import { PoliciesTable, PolicyNameCell } from './PoliciesTable.js';
+import { policies as rawPolicies } from '@/__fixtures__/policies.js';
+import { PoliciesTable } from './PoliciesTable.js';
 
-const policies = rawPolicies.edges.map(profile => profile.node);
+const policies = rawPolicies.edges.map((profile) => profile.node);
 
 describe('PoliciesTable', () => {
-    const defaultProps = {
-        history: { push: jest.fn() },
-        location: {}
-    };
-    let wrapper;
-    let instance;
+  it('expect to render without error', () => {
+    render(
+      <TestWrapper>
+        <PoliciesTable policies={policies} />
+      </TestWrapper>
+    );
+    const table = screen.queryByLabelText('Policies');
 
-    it('expect to render without error', () => {
-        wrapper = shallow(
-            <PoliciesTable
-                { ...defaultProps }
-                policies={ policies } />
-        );
+    expect(
+      within(table).getByText('C2S for Red Hat Enterprise Linux 7', {
+        selector: 'small',
+      })
+    ).toBeInTheDocument();
+  });
 
-        expect(toJson(wrapper)).toMatchSnapshot();
-    });
+  it('expect to render emptystate', async () => {
+    render(
+      <TestWrapper>
+        <PoliciesTable policies={[]} />
+      </TestWrapper>
+    );
+    const table = screen.queryByLabelText('Policies');
 
-    it('expect to render emptystate', () => {
-        wrapper = shallow(
-            <PoliciesTable
-                { ...defaultProps }
-                policies={[]} />
-        );
+    await waitFor(() =>
+      expect(within(table).getByRole('heading')).toHaveTextContent(
+        'No matching policies found'
+      )
+    );
+  });
 
-        expect(toJson(wrapper)).toMatchSnapshot();
-    });
+  it('expect to render SystemsCountWarning for all policies with 0 total hosts', () => {
+    render(
+      <TestWrapper>
+        <PoliciesTable
+          policies={policies.map((p) => ({ ...p, totalHostCount: 0 }))}
+        />
+      </TestWrapper>
+    );
+    const table = screen.queryByLabelText('Policies');
 
-    it('expect to render SystemsCountWarning', () => {
-        wrapper = shallow(
-            <PoliciesTable
-                { ...defaultProps }
-                policies={ policies.map((p) => ({ ...p, totalHostCount: 0 })) } />
-        );
-
-        expect(toJson(wrapper)).toMatchSnapshot();
-    });
-
-    describe('Pagination and search', () => {
-        beforeEach(() => {
-            wrapper = shallow(
-                <PoliciesTable
-                    { ...defaultProps }
-                    policies={ policies }
-                />);
-            instance = wrapper.instance();
-        });
-
-        it('should show only matching results after searching', async () => {
-            await instance.onFilterUpdate('name', 'CCP');
-            expect(toJson(wrapper)).toMatchSnapshot();
-        });
-
-        it('should be able to move to next and previous pages', async () => {
-            await instance.changePage(2, 10);
-            expect(toJson(wrapper)).toMatchSnapshot();
-            await instance.changePage(1, 10);
-            expect(toJson(wrapper)).toMatchSnapshot();
-        });
-    });
-});
-
-describe('PolicyNameCell', () => {
-    it('expect to render without error', () => {
-        let profile = policies[0];
-        let wrapper = shallow(
-            <PolicyNameCell profile={ profile } />
-        );
-
-        expect(toJson(wrapper)).toMatchSnapshot();
-    });
+    expect(within(table).getAllByRole('cell', { name: /^0$/i }).length).toEqual(
+      10
+    );
+  });
 });
